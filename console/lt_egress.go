@@ -165,20 +165,19 @@ func jsonNum(f float64) string {
 
 // ── l3EgressInspect — orchestrator (port of workflow_gates.go:911) ─
 // Returns map result with verdict, risk_score, matched_rule, flags, nl_preview,
-// rendered_nl, lt_raw.
+// lt_raw.
+//
+// 2026-05-19 perf fix (David: "L3 takes long time"): dropped the LLM render
+// step. Prod telemetry showed gemini-2.5-flash taking 34-35s on the
+// JSON-as-NL render prompt (≈3× the canonicalize latency). Per David's
+// original spec — L3 = "same as L0 → output attack check" — L3 should be ONE
+// LLM call (canonicalize), not two. We now use deterministic jsonToNL for
+// the flat text representation and rely on ltInspectWithLLM (canonicalize +
+// regex DPI) for the verdict. L3 per-node ~44s → ~10s.
 func l3EgressInspect(finalOutput interface{}, enableLLM bool) map[string]interface{} {
 	scrubbed := scrubExpectedBankingFields(finalOutput)
-	var renderedNL string
-	if enableLLM {
-		renderedNL = ltRenderJSONasNL(scrubbed)
-	}
 	rawJSON, _ := json.Marshal(scrubbed)
-	var scanContent string
-	if renderedNL != "" {
-		scanContent = renderedNL + " " + string(rawJSON)
-	} else {
-		scanContent = jsonToNL(scrubbed) + " " + string(rawJSON)
-	}
+	scanContent := jsonToNL(scrubbed) + " " + string(rawJSON)
 	scanContent = l3DecodeStego(scanContent)
 	preview := scanContent
 	if len(preview) > 300 {
@@ -192,7 +191,6 @@ func l3EgressInspect(finalOutput interface{}, enableLLM bool) map[string]interfa
 			"flags":        []string{"egress pre-scan"},
 			"deny_message": "[L3 EGRESS] Blocked: " + egressRule,
 			"nl_preview":   preview,
-			"rendered_nl":  renderedNL,
 		}
 	}
 	lt := ltInspectWithLLM(scanContent, enableLLM)
@@ -203,7 +201,6 @@ func l3EgressInspect(finalOutput interface{}, enableLLM bool) map[string]interfa
 		"flags":        lt.Flags,
 		"deny_message": lt.DenyMessage,
 		"nl_preview":   preview,
-		"rendered_nl":  renderedNL,
 	}
 	if lt.Raw != nil {
 		resp["lt_raw"] = json.RawMessage(lt.Raw)
