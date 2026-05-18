@@ -421,6 +421,11 @@ func runNode(ctx context.Context, node WorkflowNode, input any, runID, loopbackB
 			Verdict: l1Resp.Verdict, Score: l1Resp.Score, Reasons: l1Resp.Reasons,
 			Meta: l1Resp.Meta, LatencyMs: l1Latency, State: "completed",
 		})
+		// WP-01 — persist L1 verdict to SQLite layer_audit_log
+		l1Reasons := strings.Join(l1Resp.Reasons, " · ")
+		go AppendLayerAudit(context.Background(), projectSlug, runID, node.CESlug, "L1",
+			l1Resp.Verdict, "p-check", l1Reasons, 0,
+			float64(l1Resp.Score)/100.0, nil, input)
 		if l1Resp.Verdict != "ALLOW" {
 			return nil, true, "l1", nil
 		}
@@ -507,6 +512,11 @@ func runNode(ctx context.Context, node WorkflowNode, input any, runID, loopbackB
 		Verdict: l2Resp.Verdict, Score: l2Resp.Score, Reasons: l2Resp.Reasons,
 		Meta: l2Resp.Meta, LatencyMs: l2Latency, State: "completed",
 	})
+	// WP-01 — persist L2 verdict to SQLite layer_audit_log
+	l2Reasons := strings.Join(l2Resp.Reasons, " · ")
+	go AppendLayerAudit(context.Background(), projectSlug, runID, node.CESlug, "L2",
+		l2Resp.Verdict, "o-check", l2Reasons, 0,
+		float64(l2Resp.Score)/100.0, nil, ceOut)
 	if l2Resp.Verdict != "SUCCESS" {
 		// FAILURE or unknown verdict — halt before forwarding payload.
 		return nil, true, "l2", nil
