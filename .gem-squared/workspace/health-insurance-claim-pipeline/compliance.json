@@ -1,0 +1,32 @@
+[
+  {
+    "id": "InsClaims-PolicyDoc-§3",
+    "stage": "claim-01-intake",
+    "text": "Intake decision is binary. intake_accepted = true ⇒ rejection_reason = null AND missing_documents = []. Proof: B-output fields satisfy this implication."
+  },
+  {
+    "id": "InsClaims-PolicyDoc-§4",
+    "stage": "claim-02-policy-verification",
+    "text": "Policy verification confirms ACTIVE status within coverage window AND member identity match. Proof: policy_verified=true ⇒ policy_product_code is non-empty AND policy_start_date ≤ incident_date ≤ policy_expiry_date."
+  },
+  {
+    "id": "InsClaims-PolicyDoc-§6",
+    "stage": "claim-03-eligibility-check",
+    "text": "Eligible claims have plan coverage, satisfied waiting period, and remaining annual limit. Proof: eligible=true ⇒ claim_type_covered=true AND waiting_period_satisfied=true AND annual_limit_remaining \u003e 0 AND claimable_ceiling ≤ claim_amount_requested."
+  },
+  {
+    "id": "InsClaims-PolicyDoc-§7",
+    "stage": "claim-04-medical-review",
+    "text": "Medical review confirms necessity, valid codes, and no exclusions. Proof: medical_review_passed=true ⇒ medical_necessity_confirmed=true AND pre_auth_verified=true AND exclusions_triggered=[]."
+  },
+  {
+    "id": "InsClaims-PolicyDoc-§8",
+    "stage": "claim-05-adjudication",
+    "text": "Adjudication conserves the claim amount. Proof: net_payable + claimant_liability = claim_amount_requested (±0.01) AND adjudication_status='approved' iff net_payable \u003e 0."
+  },
+  {
+    "id": "MAS-Notice-117-§7",
+    "stage": "claim-06-disbursement",
+    "text": "Disbursed claims have traceable settlement references and masked bank data. Proof: disbursement_status='disbursed' ⇒ settlement_ref matches ^SETT-\\d{8}-\\d{5}$ AND claim_reference_no matches ^CLM-\\d{4}-\\d{7}$ AND (masked_bank_account_no is null OR masked_bank_account_no matches ^\\*{4}\\d{4}$)."
+  }
+]

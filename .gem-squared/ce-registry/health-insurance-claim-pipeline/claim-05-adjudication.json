@@ -1,0 +1,30 @@
+{
+  "workflow_slug": "health-insurance-claim-pipeline",
+  "stage_slug": "claim-05-adjudication",
+  "contract_title": "claim-adjudication",
+  "domain": "Healthcare Insurance",
+  "a": "claim_reference_draft:  string    # from claim-04-medical-review\npolicy_no:              string\nclaimant_name:          string\nclaim_type:             enum\nclaim_amount_requested: number\nclaimable_ceiling:      number    # eligibility-check; ≤ claim_amount_requested\nrps_benchmark:          number?   # medical-review; null when codes invalid upstream\nnon_panel_flag:         bool      # medical-review\npolicy_product_code:    string    # {COMP-HEALTH-GOLD, COMP-HEALTH-SILVER, COMP-HEALTH-BRONZE}\npayment_details:        object?   # passthrough — consumed by claim-06",
+  "p_pre": [
+    "[Format Validation] claim_amount_requested \u003e 0",
+    "[Format Validation] claimable_ceiling ≤ claim_amount_requested",
+    "[Data-flow Gates] Upstream `medical_review_passed = true` (Gate G4)"
+  ],
+  "f_block": "1. **Benefit schedule retrieval** — `query_plan_benefits(where:{policy_product_code, claim_type})`. Load `{deductible_annual, co_payment_pct, co_insurance_pct, co_insurance_cap, non_panel_reimbursement_pct}`.\n\n2. **Deductible utilised** — `SUM(amount) AS deductible_utilised` from `query_deductible_ledger(where:{policy_no, benefit_year:YEAR(incident_date)})`. Default 0 when empty.\n\n3. **Adjudication base** —\n   - `base = min(claim_amount_requested, rps_benchmark)` (excess over benchmark = claimant liability)\n   - `base = min(base, claimable_ceiling)` (eligibility-check cap)\n   - if `non_panel_flag=true`: `base = base × (non_panel_reimbursement_pct / 100)` (GOLD 80%, SILVER 70%, BRONZE 60%)\n   - `adjudication_base = round(base, 2)`\n\n4. **Deductible** —\n   - `deductible_remaining = max(0, deductible_annual − deductible_utilised)`\n   - `amount_after_deductible = max(0, adjudication_base − deductible_remaining)`\n   - `deductible_applied_this_claim = adjudication_base − amount_after_deductible`\n\n5. **Co-payment** — `co_pay_amount = round(amount_after_deductible × (co_payment_pct / 100), 2)`; `amount_after_copay = amount_after_deductible − co_pay_amount`.\n\n6. **Co-insurance** —\n   - `co_insurance_raw = round(amount_after_copay × (co_insurance_pct / 100), 2)`\n   - `co_insurance_amount = min(co_insurance_raw, co_insurance_cap)`\n   - `amount_after_coinsurance = amount_after_copay − co_insurance_amount`\n\n7. **Net payable** — `net_payable = round(amount_after_coinsurance, 2)`. Invariants: `0 ≤ net_payable ≤ adjudication_base`.\n\n8. **Claimant liability** — `claimant_liability = round(claim_amount_requested − net_payable, 2)`.\n\n9. **Status** —\n   - `net_payable \u003e 0` → `adjudication_status = 'approved'`\n   - `net_payable = 0` and no upstream rejection → `'zero_benefit'`\n   - upstream rejection → `'rejected'`\n\n10. **Timestamp** — `adjudication_timestamp = now_utc8()`.",
+  "b": "claim_reference_draft:          string    # passthrough\npolicy_no:                      string    # passthrough\nclaimant_name:                  string    # passthrough\nclaim_type:                     enum      # passthrough\nclaim_amount_requested:         number    # passthrough\nadjudication_base:              number    # SGD; ≤ min(rps_benchmark, claimable_ceiling)\ndeductible_applied_this_claim:  number    # SGD\nco_pay_amount:                  number    # SGD\nco_insurance_amount:            number    # SGD; ≤ co_insurance_cap\nnet_payable:                    number    # SGD; insurer disbursement\nclaimant_liability:             number    # SGD; out-of-pocket\nadjudication_status:            enum      # {approved, zero_benefit, rejected}\nadjudication_notes:             string\nadjudication_timestamp:         datetime\nincident_date:                  date      # passthrough — needed by claim-06 for ledger writes\npayment_details:                object?   # passthrough — consumed by claim-06",
+  "p_post": [
+    "[Invariants] net_payable ≥ 0 ∧ claimant_liability ≥ 0",
+    "[Invariants] **conservation**: net_payable + claimant_liability = claim_amount_requested (±0.01)",
+    "[Invariants] adjudication_status='approved' ⇔ net_payable \u003e 0"
+  ],
+  "stage_type": "deterministic",
+  "agent_role": "claim-adjudication-agent",
+  "trust_gate_l1": 70,
+  "trust_gate_l2": 70,
+  "reference_data": {
+    "deductible_ledger": "",
+    "plan_benefits": ""
+  },
+  "source_file": "/Users/inseokseo/Hackathon/TechEx/.gem-squared/workspace/health-insurance-claim-pipeline/uploaded_files/claim-05-adjudication.md",
+  "created_at": "2026-05-18T15:07:53Z",
+  "updated_at": "2026-05-18T15:07:53Z"
+}

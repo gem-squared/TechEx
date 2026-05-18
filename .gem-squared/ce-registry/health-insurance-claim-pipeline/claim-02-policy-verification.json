@@ -1,0 +1,30 @@
+{
+  "workflow_slug": "health-insurance-claim-pipeline",
+  "stage_slug": "claim-02-policy-verification",
+  "contract_title": "policy-verification",
+  "domain": "Healthcare Insurance",
+  "a": "claim_reference_draft:  string    # from claim-01-intake\npolicy_no:              string\nclaimant_name:          string\nid_document_type:       enum      # {nric, passport, fin, birth_certificate}\nid_document_no:         string\ndate_of_birth:          date\nclaimant_relationship:  enum      # {self, spouse, child, parent, sibling, other_dependent}\nclaim_type:             enum\nincident_date:          date\nclaim_amount_requested: number\nprovider_name:          string    # passthrough — consumed by claim-04\nprovider_registration:  string    # passthrough — consumed by claim-04\nsupporting_documents:   string[]  # passthrough — consumed by claim-04\nmedical_details:        object?   # passthrough\npayment_details:        object?   # passthrough — consumed by claim-06",
+  "p_pre": [
+    "[Format Validation] policy_no matches `^HIC-\\d{4}-\\d{5}$`",
+    "[Data-flow Gates] Upstream `intake_accepted = true` (Gate G1)"
+  ],
+  "f_block": "1. **Policy lookup** — `query_policies(where:{policy_no})`. Empty: POLICY_NOT_FOUND. Else retrieve `{policy_holder_id, policy_status, policy_start_date, policy_expiry_date, policy_product_code, premium_payment_mode, next_premium_due_date}`.\n\n2. **Identity match** — `query_policy_members(where:{policy_no, id_document_type, id_document_no})`. Empty: IDENTITY_MISMATCH. Else retrieve `{member_id, relationship, dependent_status, dependent_coverage_end_date}`.\n\n3. **Policy status** —\n   - `active` → proceed\n   - `lapsed` → POLICY_LAPSED\n   - `cancelled` → POLICY_CANCELLED\n   - `pending` → POLICY_PENDING_ACTIVATION\n   - other → UNKNOWN_POLICY_STATUS\n\n4. **Premium arrears** — `count_premium_ledger(where:{policy_no, payment_status:'unpaid'})` for `due_date ≤ incident_date`. If \u003e 0: UNPAID_PREMIUMS.\n\n5. **Coverage window** — `policy_start_date ≤ incident_date ≤ policy_expiry_date`:\n   - `incident_date \u003c policy_start_date` → INCIDENT_BEFORE_POLICY_START\n   - `incident_date \u003e policy_expiry_date` → OUT_OF_COVERAGE_PERIOD\n\n6. **Dependent eligibility** — if `relationship ≠ 'self'`:\n   - `dependent_status` must equal `'active'`. Else: DEPENDENT_NOT_ELIGIBLE.\n   - if `dependent_coverage_end_date` is non-null and `\u003c incident_date`: DEPENDENT_COVERAGE_EXPIRED.\n   - else `dependent_verified = true`.\n\n   If `relationship = 'self'`: `dependent_verified = true` unconditionally.\n\n7. **Duplicate claim** — `count_claims(where:{policy_no, incident_date, claim_type, status:in('pending','approved','paid')})`. If \u003e 0: DUPLICATE_CLAIM.\n\n8. **Decision** — `policy_verified` = all of {found, identity, active, current_premiums, in_window, dependent_ok, not_duplicate}. `verification_failure` = first failing code, else null.\n\n9. **Timestamp** — `verification_timestamp = now_utc8()`.",
+  "b": "claim_reference_draft:  string    # passthrough\npolicy_no:              string    # passthrough\nclaimant_name:          string    # passthrough\nclaim_type:             enum      # passthrough\nincident_date:          date      # passthrough\nclaim_amount_requested: number    # passthrough\npolicy_verified:        bool\nverification_failure:   string?   # null iff policy_verified = true\npolicy_start_date:      date?     # null when policy not found\npolicy_expiry_date:     date?     # null when policy not found\npolicy_product_code:    string?   # e.g. \"COMP-HEALTH-GOLD\"; null when policy not found\npremium_payment_mode:   string?   # {monthly, quarterly, annual}; null when policy not found\ndependent_verified:     bool\nverification_timestamp: datetime\nprovider_name:          string    # passthrough — consumed by claim-04\nprovider_registration:  string    # passthrough — consumed by claim-04\nsupporting_documents:   string[]  # passthrough — consumed by claim-04\nmedical_details:        object?   # passthrough\npayment_details:        object?   # passthrough — consumed by claim-06",
+  "p_post": [
+    "[Invariants] policy_verified is boolean",
+    "[Invariants] policy_verified = true ⇒ verification_failure = null ∧ dependent_verified = true ∧ policy_product_code is non-empty"
+  ],
+  "stage_type": "deterministic",
+  "agent_role": "policy-verification-agent",
+  "trust_gate_l1": 70,
+  "trust_gate_l2": 70,
+  "reference_data": {
+    "claims": "",
+    "policies": "",
+    "policy_members": "",
+    "premium_ledger": ""
+  },
+  "source_file": "/Users/inseokseo/Hackathon/TechEx/.gem-squared/workspace/health-insurance-claim-pipeline/uploaded_files/claim-02-policy-verification.md",
+  "created_at": "2026-05-18T15:07:53Z",
+  "updated_at": "2026-05-18T15:07:53Z"
+}

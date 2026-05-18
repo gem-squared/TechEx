@@ -1,0 +1,29 @@
+{
+  "workflow_slug": "health-insurance-claim-pipeline",
+  "stage_slug": "claim-01-intake",
+  "contract_title": "claim-intake",
+  "domain": "Healthcare Insurance",
+  "a": "policy_no:              string    # e.g. \"HIC-2024-00123\"\npolicy_holder:          string\nclaimant_name:          string\nclaimant_relationship:  enum      # {self, spouse, child, parent, sibling, other_dependent}\nid_document_type:       enum      # {nric, passport, fin, birth_certificate}\nid_document_no:         string\ndate_of_birth:          date      # YYYY-MM-DD\nclaim_date:             date\nincident_date:          date\nclaim_type:             enum      # {hospitalisation, outpatient, surgical, dental, vision, maternity, mental_health, emergency}\nprovider_name:          string\nprovider_registration:  string\nclaim_amount_requested: number    # SGD\nsupporting_documents:   string[]  # subset of {medical_bill, discharge_summary, referral_letter, prescription, lab_report, imaging_report, specialist_memo, pre_auth_approval}\nclaimant_contact_email: string\nclaimant_contact_phone: string\nmedical_details:        object?   # optional; if absent claim-04 will infer plausible values from supporting_documents + claim_type\npayment_details:        object?   # optional; if absent claim-06 will default to direct_credit with bank info pulled from policy registry",
+  "p_pre": [
+    "[Format Validation] policy_no matches `^HIC-\\d{4}-\\d{5}$`",
+    "[Format Validation] claim_amount_requested \u003e 0",
+    "[Format Validation] incident_date ≤ claim_date"
+  ],
+  "f_block": "1. **Policy number** — match regex `^HIC-\\d{4}-\\d{5}$`. Else: INVALID_POLICY_FORMAT. Then `query_policies(where:{policy_no})` — else: POLICY_NOT_FOUND.\n\n2. **Identity document** — match by `id_document_type`:\n   - nric: `^[STFG]\\d{7}[A-Z]$`\n   - fin: `^[FG]\\d{7}[A-Z]$`\n   - passport: `^[A-Z]{1,2}\\d{6,9}$`\n   - birth_certificate: `^[A-Z]{2}\\d{6}[A-Z]$`\n\n   Else: INVALID_ID_FORMAT.\n\n3. **Date sanity** —\n   - `date_of_birth \u003c claim_date` else: INVALID_DATE_OF_BIRTH\n   - `age = floor((claim_date − date_of_birth) / 365.25)` in [0, 120] else: INVALID_DATE_OF_BIRTH\n   - `incident_date ≤ claim_date` else: FUTURE_INCIDENT_DATE\n   - `claim_date == now_utc8().date()` else: INVALID_CLAIM_DATE\n\n4. **Submission window** — `claim_date − incident_date ≤ 365` calendar days. Else: LATE_SUBMISSION.\n\n5. **Claim amount** — `claim_amount_requested \u003e 0`. Else: INVALID_CLAIM_AMOUNT.\n\n6. **Documents vocabulary** — every item of `supporting_documents` ∈ `{medical_bill, discharge_summary, referral_letter, prescription, lab_report, imaging_report, specialist_memo, pre_auth_approval}`. Else: UNKNOWN_DOCUMENT_TYPE.\n\n7. **Documents completeness** — minimum by `claim_type`:\n\n   | claim_type | required |\n   |---|---|\n   | hospitalisation / surgical / maternity | medical_bill + discharge_summary |\n   | outpatient / dental / vision / emergency | medical_bill |\n   | mental_health | medical_bill |\n\n   Absent required tokens → `missing_documents[]`. If non-empty: MISSING_REQUIRED_DOCUMENTS.\n\n8. **Contact** —\n   - email matches `^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$` else: INVALID_EMAIL\n   - phone matches `^\\+?[0-9]{8,15}$` else: INVALID_PHONE\n\n9. **Decision** — `intake_accepted` = all of {format ✓, policy_exists, id_format, dates, window, amount, vocab, docs, email, phone}.\n\n10. **Rejection reason** — first failing check (per order above), else null.\n\n11. **Reference** — `claim_reference_draft = \"DRAFT-\" + now_utc8().YYYYMMDD + \"-\" + zfill5(seq)`.\n\n12. **Timestamp** — `intake_timestamp = now_utc8()`.",
+  "b": "claim_reference_draft:  string    # DRAFT-YYYYMMDD-##### (YYYY from now_utc8)\npolicy_no:              string    # passthrough\nclaimant_name:          string    # passthrough\nid_document_type:       enum      # passthrough\nid_document_no:         string    # passthrough\ndate_of_birth:          date      # passthrough\nclaimant_relationship:  enum      # passthrough\nclaim_type:             enum      # passthrough\nincident_date:          date      # passthrough\nclaim_date:             date      # passthrough\nclaim_amount_requested: number    # passthrough\nprovider_name:          string    # passthrough — consumed by claim-04\nprovider_registration:  string    # passthrough — consumed by claim-04\nsupporting_documents:   string[]  # passthrough — consumed by claim-04\nmedical_details:        object?   # passthrough (nullable; may be filled by claim-04)\npayment_details:        object?   # passthrough — consumed by claim-06\nintake_accepted:        bool\nrejection_reason:       string?   # null iff intake_accepted = true\nmissing_documents:      string[]  # empty iff all required present\nintake_timestamp:       datetime  # ISO 8601 UTC+8",
+  "p_post": [
+    "[Invariants] intake_accepted is boolean",
+    "[Invariants] intake_accepted = true ⇒ rejection_reason = null ∧ missing_documents = []",
+    "[Invariants] claim_reference_draft matches `^DRAFT-\\d{8}-\\d{5}$`"
+  ],
+  "stage_type": "llm-assisted",
+  "agent_role": "claim-intake-agent",
+  "trust_gate_l1": 70,
+  "trust_gate_l2": 70,
+  "reference_data": {
+    "policies": ""
+  },
+  "source_file": "/Users/inseokseo/Hackathon/TechEx/.gem-squared/workspace/health-insurance-claim-pipeline/uploaded_files/claim-01-intake.md",
+  "created_at": "2026-05-18T15:07:53Z",
+  "updated_at": "2026-05-18T15:07:53Z"
+}
