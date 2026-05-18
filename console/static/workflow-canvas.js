@@ -917,7 +917,24 @@
       section.classList.add('error');
       return;
     }
-    if (evt.phase === 'l1') {
+    if (evt.phase === 'l0') {
+      if (verdict === 'ALLOW' || verdict === 'SKIPPED') {
+        pill.textContent = `L0 ${verdict}`;
+        section.classList.remove('error');
+      } else if (verdict === 'DENY') {
+        pill.textContent = `L0 DENY`;
+        section.classList.add('error');
+      }
+    } else if (evt.phase === 'l3') {
+      if (verdict === 'ALLOW' || verdict === 'SKIPPED') {
+        pill.textContent = `L3 ${verdict}`;
+        section.classList.add('wf-trace-collapsed');
+      } else if (verdict === 'DENY') {
+        pill.textContent = `L3 DENY`;
+        section.classList.remove('wf-trace-collapsed');
+        section.classList.add('error');
+      }
+    } else if (evt.phase === 'l1') {
       if (verdict === 'ALLOW' || verdict === 'SKIPPED') {
         pill.textContent = `L1 ${verdict}${evt.score ? ' · ' + evt.score : ''}`;
         section.classList.remove('error', 'l2-failure');
@@ -1115,7 +1132,9 @@
 
     // WP-AO-59 — if a phase-start ("running") row exists for this
     // (node_id, phase), replace its content in place rather than appending.
-    if (evt.phase === 'l1' || evt.phase === 'exec' || evt.phase === 'l2') {
+    // WP-01 U5 fix (2026-05-19): include l0/l3 so their "running…" rows get
+    // swapped in place on completion instead of getting a duplicate ALLOW row.
+    if (evt.phase === 'l0' || evt.phase === 'l1' || evt.phase === 'exec' || evt.phase === 'l2' || evt.phase === 'l3') {
       const key = activeRowKey(evt);
       const activeRow = activeRows.get(key);
       if (activeRow) {

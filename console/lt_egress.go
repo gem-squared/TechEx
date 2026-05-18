@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // ── l3Pattern + 14 egress patterns (verbatim from demo-advanced) ────
@@ -167,17 +168,54 @@ func jsonNum(f float64) string {
 // Returns map result with verdict, risk_score, matched_rule, flags, nl_preview,
 // lt_raw.
 //
-// 2026-05-19 perf fix (David: "L3 takes long time"): dropped the LLM render
-// step. Prod telemetry showed gemini-2.5-flash taking 34-35s on the
-// JSON-as-NL render prompt (≈3× the canonicalize latency). Per David's
-// original spec — L3 = "same as L0 → output attack check" — L3 should be ONE
-// LLM call (canonicalize), not two. We now use deterministic jsonToNL for
-// the flat text representation and rely on ltInspectWithLLM (canonicalize +
-// regex DPI) for the verdict. L3 per-node ~44s → ~10s.
+// 2026-05-19 perf evolution:
+//   - First fix dropped the LLM render entirely (Gemini render was 34s/call).
+//   - Second fix (this) restores the render BUT forces it through Vultr (much
+//     faster on this prompt per David's finding). Canonicalize still routes
+//     via LT_LLM_PROVIDER (Gemini default). L3 latency now ~10-15s/node.
+//
+// Two LLM calls again, but parallelized: vultrRenderJSONasNL and the L3
+// canonicalize inside ltInspectWithLLM run concurrently via sync.WaitGroup.
+// max(render, canonicalize) ≈ canonicalize ≈ 10s, since Vultr render is
+// ~3-5s while Gemini canonicalize is ~10s.
 func l3EgressInspect(finalOutput interface{}, enableLLM bool) map[string]interface{} {
 	scrubbed := scrubExpectedBankingFields(finalOutput)
 	rawJSON, _ := json.Marshal(scrubbed)
-	scanContent := jsonToNL(scrubbed) + " " + string(rawJSON)
+
+	// Run render (Vultr) and canonicalize (provider-routed) in parallel.
+	// Render is non-blocking for the verdict: it only enriches the popup
+	// preview. Canonicalize feeds the deterministic regex DPI as scan content.
+	var renderedNL string
+	var ci CanonicalIntent
+	if enableLLM {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			renderedNL = vultrRenderJSONasNL(scrubbed)
+		}()
+		go func() {
+			defer wg.Done()
+			// Canonicalize the raw JSON (the render isn't ready yet — they're
+			// parallel). Synthetic intent labels still come back useful for the
+			// downstream regex scan.
+			ci = ltSemanticCanonicalize(string(rawJSON))
+		}()
+		wg.Wait()
+	}
+
+	// Build scan content: rendered NL (when present) + raw JSON + canonical
+	// intent labels (when present). Deterministic jsonToNL fallback if the
+	// render LLM was unavailable.
+	scanContent := string(rawJSON)
+	if renderedNL != "" {
+		scanContent = renderedNL + " " + scanContent
+	} else {
+		scanContent = jsonToNL(scrubbed) + " " + scanContent
+	}
+	if extra := canonicalIntentScanText(ci); extra != "" {
+		scanContent += "\n\n[LLM_CANONICAL_INTENT]\n" + extra
+	}
 	scanContent = l3DecodeStego(scanContent)
 	preview := scanContent
 	if len(preview) > 300 {
@@ -191,9 +229,15 @@ func l3EgressInspect(finalOutput interface{}, enableLLM bool) map[string]interfa
 			"flags":        []string{"egress pre-scan"},
 			"deny_message": "[L3 EGRESS] Blocked: " + egressRule,
 			"nl_preview":   preview,
+			"rendered_nl":  renderedNL,
 		}
 	}
-	lt := ltInspectWithLLM(scanContent, enableLLM)
+	// Pure-pattern ltInspect — LLM canonicalize already happened in the parallel
+	// goroutine above, so no need to fire a second LLM call here.
+	lt := ltInspect(scanContent)
+	if len(ci.IntentLabels) > 0 {
+		lt.Flags = append(lt.Flags, "llm_intent:"+strings.Join(ci.IntentLabels, ","))
+	}
 	resp := map[string]interface{}{
 		"verdict":      lt.Verdict,
 		"risk_score":   lt.RiskScore,
@@ -201,6 +245,7 @@ func l3EgressInspect(finalOutput interface{}, enableLLM bool) map[string]interfa
 		"flags":        lt.Flags,
 		"deny_message": lt.DenyMessage,
 		"nl_preview":   preview,
+		"rendered_nl":  renderedNL,
 	}
 	if lt.Raw != nil {
 		resp["lt_raw"] = json.RawMessage(lt.Raw)
