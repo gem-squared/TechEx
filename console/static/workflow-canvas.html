@@ -85,8 +85,10 @@
     </div>
 
     <div class="wf-actions">
-      <!-- WP-AO-41: scenario picker — pre-filled inputs for the
-           Health-Insurance-Claim demo. Hidden until SCENARIOS is populated. -->
+      <!-- WP-AO-41 scenario picker — hidden 2026-05-19 (David: dropdown UX
+           unreliable; per-node SampleI is the canonical input surface now).
+           JS populateScenarioPicker still fills it but CSS suppresses display.
+           Re-enable: remove the !important display:none in workflow-canvas.css. -->
       <select id="wf-scenario-picker" class="wf-scenario-picker" style="display:none;"
               title="Pick a pre-filled demo scenario — used as the Run input"></select>
       <!-- WP-AO-51: zoom controls. Always visible. Keyboard +/-/0 also wired. -->

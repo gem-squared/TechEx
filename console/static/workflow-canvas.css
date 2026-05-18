@@ -1534,3 +1534,22 @@ body.wf-dragging-v, body.wf-dragging-v * { cursor: row-resize !important; user-s
   font-family: inherit;
 }
 
+
+/* Audit-log CTA button — stand-out gold/yellow so judges find it */
+.wf-audit-btn-cta {
+  background: rgba(250, 204, 21, 0.10);
+  border-color: rgba(250, 204, 21, 0.55);
+  color: var(--yellow);
+  font-weight: 600;
+}
+.wf-audit-btn-cta:hover {
+  background: rgba(250, 204, 21, 0.18);
+  border-color: var(--yellow);
+  color: var(--yellow);
+  filter: brightness(1.1);
+}
+
+/* David 2026-05-19 — scenario picker dropdown hidden; canonical input
+   surface is now per-node SampleI via the CE Viewer. */
+.wf-scenario-picker { display: none !important; }
+
