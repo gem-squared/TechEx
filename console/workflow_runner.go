@@ -178,44 +178,6 @@ func RunWorkflow(ctx context.Context, wf WorkflowJSON, input map[string]any, run
 	// node consumes the previous node's output. Input to first node = user input.
 	var payload any = input
 
-	// WP-01 2026-05-19 — global judge-injection: scan ALL nodes' CEs for an
-	// edited SampleI (SampleI != OriginalSampleI). If any exist, take the
-	// MOST-RECENTLY-EDITED one (by spec.UpdatedAt) and use it as the input to
-	// EVERY node in the workflow — not just the injecting node. This lets
-	// judges paste adversarial JSON into any CE viewer Save and watch each
-	// node's L0 (and L3 on the output side) try to catch the same payload.
-	// When no SampleI is edited, the normal prev-output chain applies.
-	var globalInjection any
-	var injectionSlug, injectionTS string
-	for _, nodeID := range order {
-		node := nodeByID[nodeID]
-		wfSlug, stageSlug := splitCESlug(node.CESlug)
-		if wfSlug == "" || stageSlug == "" {
-			continue
-		}
-		spec, lerr := loadCESpec(wfSlug, stageSlug)
-		if lerr != nil || spec == nil {
-			continue
-		}
-		if spec.SampleI == "" || spec.OriginalSampleI == "" || spec.SampleI == spec.OriginalSampleI {
-			continue
-		}
-		// Prefer the spec with the latest UpdatedAt — that's the "last
-		// content the user injected" most likely intended.
-		if injectionTS == "" || spec.UpdatedAt > injectionTS {
-			var edited any
-			if jerr := json.Unmarshal([]byte(spec.SampleI), &edited); jerr == nil {
-				globalInjection = edited
-				injectionSlug = node.CESlug
-				injectionTS = spec.UpdatedAt
-			}
-		}
-	}
-	if globalInjection != nil {
-		log.Printf("[WORKFLOW-RUN] global judge-injection from %s (updated_at=%s) — all nodes will use this as input", injectionSlug, injectionTS)
-		payload = globalInjection
-	}
-
 	for _, nodeID := range order {
 		node := nodeByID[nodeID]
 
@@ -227,11 +189,20 @@ func RunWorkflow(ctx context.Context, wf WorkflowJSON, input map[string]any, run
 		default:
 		}
 
-		// When a global injection is active, force every node's input to the
-		// injected payload. This breaks the chain (prev_output discarded) so
-		// each downstream node's L0 sees the same malicious content.
-		if globalInjection != nil {
-			payload = globalInjection
+		// WP-01 2026-05-19 — per-node judge-injection.
+		// L0 of node N only fires on node N's input when the workflow REACHES
+		// node N. If THIS node has SampleI != OriginalSampleI, override the
+		// chain input with the edited sample for THIS node only. Nodes that
+		// weren't edited use prev-output as normal.
+		if wfSlug, stageSlug := splitCESlug(node.CESlug); wfSlug != "" && stageSlug != "" {
+			if spec, lerr := loadCESpec(wfSlug, stageSlug); lerr == nil && spec != nil &&
+				spec.SampleI != "" && spec.OriginalSampleI != "" && spec.SampleI != spec.OriginalSampleI {
+				var edited any
+				if jerr := json.Unmarshal([]byte(spec.SampleI), &edited); jerr == nil {
+					log.Printf("[WORKFLOW-RUN] judge-edit at %s — overriding chain input for this node only", node.CESlug)
+					payload = edited
+				}
+			}
 		}
 
 		out, halt, phase, err := runNode(ctx, node, payload, runID, loopbackBase, authKey, wf.WorkflowSlug, wf.auditL1Enabled(), wf.auditL2Enabled(), emit)
