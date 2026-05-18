@@ -1,36 +1,33 @@
-# OS
+# ───── OS ─────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 
-# IDE
+# ───── IDE ────────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
 *.swo
-archive/
-archive/*
-!.gem-squared/archive/
-!.gem-squared/archive/**
 
-# Environment
+# ───── Archive folders — anywhere in the tree ─────────────────────
+archive/
+archive/**
+**/archive/
+**/archive/**
+
+# ───── Environment / secrets ──────────────────────────────────────
 .env
 .env.local
 .env.*.local
 
-# Dependencies
+# ───── Dependencies ───────────────────────────────────────────────
 node_modules/
 venv/
 __pycache__/
 
-# Build
+# ───── Build artifacts ────────────────────────────────────────────
 dist/
 build/
 *.egg-info/
-
-# TPMN artifacts (keep alarm.md and work-plan tracked)
-.gem-squared/truth-logs/
-.gem-squared/verify-work-logs/
-.gem-squared/evidences/
 *.exe
 loan-agent
 gem2-crafter
@@ -39,9 +36,27 @@ gem2-techex
 gem2-techex-linux
 bin/
 *.txt
-Docs/Workflow-candidates
 
-# Dev-only spike artifacts (NOT shipped — Go 1.25 //go:embed does NOT
-# actually exclude underscore-prefixed dirs under wildcard, contrary to
-# older docs. So we gitignore explicitly.)
+# ───── TPMN / dev-state (.gem-squared) ────────────────────────────
+# Aggressive default: ignore everything under .gem-squared/ EXCEPT the
+# work-plan directory (the pitch + decomposition story is part of the repo).
+.gem-squared/*
+!.gem-squared/work-plan/
+!.gem-squared/work-plan/**
+
+# Covered by the wildcard above; listed for grep-discoverability:
+#   .gem-squared/truth-logs/
+#   .gem-squared/verify-work-logs/
+#   .gem-squared/evidences/
+#   .gem-squared/workspace/
+#   .gem-squared/sessions/
+#   .gem-squared/ce-registry/
+#   .gem-squared/external-skills/
+#   .gem-squared/gem2-core-skills/
+#   .gem-squared/archive/
+
+# ───── Dev-only spike artifacts ───────────────────────────────────
 console/static/_spike/
+
+# ───── Catch-all for ad-hoc dev scratch ───────────────────────────
+Docs/Workflow-candidates
