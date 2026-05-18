@@ -113,6 +113,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// U9 — TEST FIELD: bare "/" serves workflow-canvas.html directly (the
+	// canvas IS the application). index.html / Crafter tab shell retired.
+	// FileServer keeps serving asset paths (/style.css, /workflow-canvas.js,
+	// /vendor/*, etc.) for everything except the exact root.
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		data, err := staticFiles.ReadFile("static/workflow-canvas.html")
+		if err != nil {
+			http.Error(w, "TEST FIELD page not found", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(data)
+	})
 	mux.Handle("GET /", http.FileServer(http.FS(sub)))
 
 	handler := corsMiddleware(mux)

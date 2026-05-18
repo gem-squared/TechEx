@@ -3,18 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Workflow Canvas — GEM² + Lobster Trap</title>
+  <title>TEST FIELD — GEM² + Lobster Trap</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/vendor/drawflow/drawflow.min.css">
   <link rel="stylesheet" href="/workflow-canvas.css">
 </head>
 <body class="wf-page">
 
+  <!-- Gate: Cover / Pitch Page (TechEX hackathon — auto-auth on Enter) -->
+  <div id="gate-cover" class="gate-cover">
+    <div class="gate-content">
+      <div class="gate-logo">GEM² × 🦞</div>
+      <h1 class="gate-title">GEM² + Lobster Trap: Two-Layer AI Governance</h1>
+      <p class="gate-pitch">Enterprise AI needs <strong>two trust layers</strong> — security and truth. <strong>Lobster Trap</strong> blocks prompt-layer attacks at the wire in &lt;15&nbsp;ms. <strong>GEM²</strong> audits reasoning-layer truth after the wire. Together: a four-gate governance pipeline that security and compliance teams can read.</p>
+
+      <div class="gate-layers">
+        <div class="gate-layer">
+          <span class="gate-layer-icon">🦞</span>
+          <div>
+            <strong>Lobster Trap — L0 (ingress) + L3 (egress)</strong>
+            <span class="gate-layer-desc">"Is this safe?" — fast, deterministic DPI. L0 scans the NL prompt at ingress; L3 scans the rendered output at egress. Regex + 22 metadata fields + YAML policy. Zero runtime cost.</span>
+          </div>
+        </div>
+        <div class="gate-layer">
+          <span class="gate-layer-icon">🔬</span>
+          <div>
+            <strong>GEM² Truth Filter — L1 (P-check) + L2 (O-check)</strong>
+            <span class="gate-layer-desc">"Is this true?" — semantic + epistemic evaluation. L1 validates input against type A &amp; preconditions; L2 validates output against type B &amp; postconditions. TPMN formal-methods scoring (0-100).</span>
+          </div>
+        </div>
+        <div class="gate-layer">
+          <span class="gate-layer-icon">🤖</span>
+          <div>
+            <strong>Contract-Executor (Vultr open-source LLM)</strong>
+            <span class="gate-layer-desc">Single-F worker between the gates. Vultr DeepSeek-V3.2 executes one contract's processing logic per stage. The contract holds; swap the model. L0 → L1 → F → L2 → L3 chain per node.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="gate-auth">
+        <button id="gate-submit" class="gate-btn">Enter Console</button>
+      </div>
+
+      <p class="gate-footer">GEM².AI × Veea — TechEX Hackathon 2026 · Track 1: Agent Security &amp; AI Governance</p>
+    </div>
+  </div>
+
   <!-- Top bar ──────────────────────────────────────────────────────── -->
   <header class="wf-header">
     <div class="wf-brand">
       <span class="wf-logo">GEM²</span>
-      <span class="wf-tag">Workflow Canvas</span>
+      <span class="wf-tag">TEST FIELD</span>
     </div>
 
     <div class="wf-title-block">
@@ -40,10 +79,14 @@
         <button id="wf-zoom-reset" class="wf-btn wf-btn-ghost wf-btn-icon" title="Reset zoom (0)">⊙</button>
         <button id="wf-zoom-in"    class="wf-btn wf-btn-ghost wf-btn-icon" title="Zoom in (+)">+</button>
       </div>
+      <!-- ⚡ Load demo project — one-click bootstrap of the 6-CE health-insurance-claim pipeline -->
+      <button id="btn-load-demo" class="btn-load-demo"
+              title="Pre-load the health-insurance-claim demo (6 CEs ready in one click)">⚡ Load demo project</button>
       <!-- Primary actions stay visible — Run + Deploy are the CTAs -->
       <button id="wf-run-btn"  class="wf-btn wf-btn-accent" title="Execute the workflow (L1/L2 audit per menu toggles)">▶ Run</button>
       <button id="wf-deploy-btn" class="wf-deploy-btn" disabled
               title="Run a test first to enable Deploy">Deploy now</button>
+      <button id="lock-btn" class="lock-btn" type="button" title="Return to cover / lock the session">🔒 Lock</button>
       <!-- WP-AO-51: hamburger menu — Load/Save + audit toggles (secondary actions) -->
       <div class="wf-menu-wrapper">
         <button id="wf-menu-btn" class="wf-btn wf-btn-ghost" title="More actions">☰</button>
@@ -168,21 +211,71 @@
     </div>
   </div>
 
-  <!-- Drawflow + canvas glue (Unit 4-6 wires this) -->
+  <!-- Drawflow + canvas glue -->
   <script src="/vendor/drawflow/drawflow.min.js"></script>
   <script>
-    // Auth gate: redirect to login if no key in query string.
-    // The full canvas JS (Units 4-6) replaces this stub.
-    (function authGate() {
+    // TEST FIELD auth boot — sessionStorage > ?key= URL param > gate-cover prompt.
+    // The TechEX demo key is auto-submitted on Enter Console click; on success we
+    // reload so workflow-canvas.js sees a populated WF_AUTH_KEY at module-eval time.
+    window.TECHEX_DEMO_KEY = 'G0ZWD5U741xThIGD6JBcx5Y52vLEnHu';
+
+    (function authBoot() {
+      const saved = sessionStorage.getItem('aio-key') || localStorage.getItem('aio-key');
+      if (saved) {
+        window.WF_AUTH_KEY = saved;
+        return; // gate-cover hidden on DOMContentLoaded below
+      }
       const params = new URLSearchParams(window.location.search);
-      const key = params.get('key');
-      if (!key) {
-        // Send the user back to the gate page
-        window.location.href = '/';
+      const keyParam = params.get('key');
+      if (keyParam) {
+        window.WF_AUTH_KEY = keyParam;
+        sessionStorage.setItem('aio-key', keyParam);
+        localStorage.setItem('aio-key', keyParam);
         return;
       }
-      window.WF_AUTH_KEY = key;
+      // No key — gate-cover stays visible; Enter Console click handler authenticates.
     })();
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const gate = document.getElementById('gate-cover');
+      const submitBtn = document.getElementById('gate-submit');
+      const lockBtn = document.getElementById('lock-btn');
+
+      // Hide gate immediately if we already have an auth key
+      if (window.WF_AUTH_KEY && gate) gate.classList.add('hidden');
+
+      if (submitBtn) {
+        submitBtn.addEventListener('click', async () => {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Loading…';
+          try {
+            const res = await fetch('/api/auth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: window.TECHEX_DEMO_KEY })
+            });
+            if (res.ok) {
+              sessionStorage.setItem('aio-key', window.TECHEX_DEMO_KEY);
+              localStorage.setItem('aio-key', window.TECHEX_DEMO_KEY);
+              // Reload so workflow-canvas.js can boot with the key set.
+              window.location.reload();
+            } else {
+              submitBtn.textContent = 'Auth failed — refresh page';
+            }
+          } catch (e) {
+            submitBtn.textContent = 'Network error — refresh page';
+          }
+        });
+      }
+
+      if (lockBtn) {
+        lockBtn.addEventListener('click', () => {
+          sessionStorage.removeItem('aio-key');
+          localStorage.removeItem('aio-key');
+          window.location.reload();
+        });
+      }
+    });
   </script>
   <script src="/workflow-canvas.js" defer></script>
 </body>

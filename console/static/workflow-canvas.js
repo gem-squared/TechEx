@@ -1473,6 +1473,7 @@
     wireTitleSlug();
     populateScenarioPicker();           // WP-AO-41: scenario dropdown
     wirePaletteReload();                // WP-AO-49 Unit 3: manual + postMessage reload
+    wireLoadDemoBtn();                  // U9: ⚡ Load demo project header button
     wireHamburgerMenu();                // WP-AO-51: secondary-actions dropdown
     wireZoomControls();                 // WP-AO-51: zoom toolbar + keyboard
     wireNodeClickViewer();              // WP-AO-51: per-node CE viewer modal
@@ -1766,6 +1767,40 @@
     window.addEventListener('message', (evt) => {
       if (!evt.data || evt.data.type !== 'reload-registry') return;
       loadRegistry().catch(() => {});
+    });
+  }
+
+  // ── ⚡ Load demo project — one-click 6-CE bootstrap ──────────────
+  // POSTs /api/crafter/bootstrap-demo (server seeds the health-insurance-claim
+  // CEs from embedded demo-assets), then reloads the palette and attempts the
+  // claims-demo workflow auto-load so the canvas populates without a refresh.
+  function wireLoadDemoBtn() {
+    const btn = document.getElementById('btn-load-demo');
+    if (!btn) return;
+    const original = btn.textContent;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = '⏳ Loading demo…';
+      try {
+        const r = await fetch('/api/crafter/bootstrap-demo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Access-Key': authKey },
+          body: '{}'
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        const ceCount = data.ce_count || 0;
+        const skipped = (data.skipped || []).length;
+        const errs = (data.errors || []).length;
+        btn.textContent = `✓ ${ceCount} CEs ready` + (skipped ? ` (${skipped} skipped)` : '') + (errs ? ` [${errs} errors]` : '');
+        await loadRegistry();
+        await tryAutoLoadDemoWorkflow();
+      } catch (e) {
+        toast('Demo bootstrap failed: ' + e.message, 'err', 4000);
+        btn.textContent = original;
+      } finally {
+        setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 4000);
+      }
     });
   }
 
