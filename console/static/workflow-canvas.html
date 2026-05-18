@@ -102,7 +102,7 @@
       <button id="wf-run-btn"  class="wf-btn wf-btn-accent" title="Execute the workflow (L1/L2 audit per menu toggles)">▶ Run</button>
       <button id="wf-deploy-btn" class="wf-deploy-btn" disabled
               title="Run a test first to enable Deploy">Deploy now</button>
-      <button id="wf-audit-btn" class="wf-btn wf-btn-ghost" type="button"
+      <button id="wf-audit-btn" class="wf-btn wf-audit-btn-cta" type="button"
               title="Open the SQLite audit log — every L0/L1/L2/L3 verdict for this workflow">📋 Audit log</button>
       <button id="lock-btn" class="lock-btn" type="button" title="Return to cover / lock the session">🔒 Lock</button>
       <!-- WP-AO-51: hamburger menu — Load/Save + audit toggles (secondary actions) -->
@@ -255,7 +255,7 @@
               <th>verdict</th>
               <th>risk</th>
               <th>matched_rule</th>
-              <th>deny_message</th>
+              <th>message</th>
             </tr>
           </thead>
           <tbody id="wf-audit-tbody">
