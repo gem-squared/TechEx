@@ -99,6 +99,9 @@ func main() {
 	// WP-AO-53 Unit 1 — embedded demo project bootstrap (one-click for judges)
 	mux.HandleFunc("POST /api/crafter/bootstrap-demo", heavyRL.wrap(authGuard(limitBody(handleBootstrapDemo))))
 
+	// WP-01 — read-only audit-log query for the canvas Audit Log button
+	mux.HandleFunc("GET /api/audit-log", authGuard(handleAuditLog))
+
 	// Stage-3 Workflow Canvas (WP-AO-38)
 	RegisterWorkflowRoutes(mux, heavyRL)
 

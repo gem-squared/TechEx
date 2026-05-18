@@ -1547,6 +1547,7 @@
     wirePaletteReload();                // WP-AO-49 Unit 3: manual + postMessage reload
     wireLoadDemoBtn();                  // U9: ⚡ Load demo project header button
     wireLayerChipClicks();              // WP-01 U5: trust-gate chip → popup modal
+    wireAuditLogModal();                // WP-01: 📋 Audit log button + modal
     wireHamburgerMenu();                // WP-AO-51: secondary-actions dropdown
     wireZoomControls();                 // WP-AO-51: zoom toolbar + keyboard
     wireNodeClickViewer();              // WP-AO-51: per-node CE viewer modal
@@ -1949,6 +1950,104 @@
     const modal = document.getElementById('wf-layer-modal');
     if (modal) modal.classList.add('hidden');
   }
+
+  // ── WP-01: 📋 Audit log button + modal ──────────────────────────
+  // Fetches /api/audit-log?workflow_slug=<current> and renders a table of
+  // every L0/L1/L2/L3 verdict. Demo-ready surface for the "regulator-readable
+  // evidence" claim on slide 3 / 4 of the pitch.
+  function wireAuditLogModal() {
+    const btn      = document.getElementById('wf-audit-btn');
+    const modal    = document.getElementById('wf-audit-modal');
+    const closeBtn = document.getElementById('wf-audit-modal-close');
+    if (!btn || !modal) return;
+    btn.addEventListener('click', () => openAuditLog());
+    if (closeBtn) closeBtn.addEventListener('click', closeAuditLog);
+    document.getElementById('wf-audit-refresh')?.addEventListener('click', () => loadAuditLog());
+    document.getElementById('wf-audit-layer') ?.addEventListener('change', () => loadAuditLog());
+    document.getElementById('wf-audit-verdict')?.addEventListener('change', () => loadAuditLog());
+    document.getElementById('wf-audit-limit')  ?.addEventListener('change', () => loadAuditLog());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeAuditLog();
+    });
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeAuditLog(); });
+  }
+  function openAuditLog() {
+    const modal = document.getElementById('wf-audit-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    loadAuditLog();
+  }
+  function closeAuditLog() {
+    document.getElementById('wf-audit-modal')?.classList.add('hidden');
+  }
+  async function loadAuditLog() {
+    const wfSlug  = ($('#wf-slug-input')?.value || '').trim() || 'untitled';
+    const layer   = document.getElementById('wf-audit-layer')?.value   || 'all';
+    const verdict = document.getElementById('wf-audit-verdict')?.value || 'all';
+    const limit   = document.getElementById('wf-audit-limit')?.value   || '200';
+    const status  = document.getElementById('wf-audit-status');
+    const tbody   = document.getElementById('wf-audit-tbody');
+    const wfEl    = document.getElementById('wf-audit-modal-wf');
+    const sumEl   = document.getElementById('wf-audit-summary');
+    if (wfEl) wfEl.textContent = `· ${wfSlug}`;
+    if (status) status.textContent = 'loading…';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="wf-audit-empty">Loading…</td></tr>';
+    const params = new URLSearchParams({ workflow_slug: wfSlug, layer, verdict, limit });
+    try {
+      const res = await fetch('/api/audit-log?' + params.toString(), {
+        headers: { 'X-Access-Key': authKey }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (status) status.textContent = 'error: ' + (data.detail || res.status);
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="wf-audit-empty">${escapeHTML(data.detail || ('HTTP ' + res.status))}</td></tr>`;
+        return;
+      }
+      // Render summary chips
+      if (sumEl) sumEl.innerHTML = renderAuditSummary(data.summary || {});
+      // Render rows
+      if (tbody) {
+        if (!data.rows || data.rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="wf-audit-empty">No matching rows. Run the workflow first.</td></tr>';
+        } else {
+          tbody.innerHTML = data.rows.map(renderAuditRow).join('');
+        }
+      }
+      if (status) status.textContent = `${data.count} rows`;
+    } catch (e) {
+      if (status) status.textContent = 'error: ' + e.message;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="wf-audit-empty">${escapeHTML(e.message)}</td></tr>`;
+    }
+  }
+  function renderAuditSummary(summary) {
+    const order = ['L0', 'L1', 'L2', 'L3'];
+    const parts = [];
+    for (const layer of order) {
+      const rec = summary[layer];
+      if (!rec) continue;
+      const sub = Object.entries(rec)
+        .map(([v, n]) => `<span class="wf-audit-pill v-${escAttr(v).toLowerCase()}">${escapeHTML(v)} ${n}</span>`)
+        .join(' ');
+      parts.push(`<span class="wf-audit-pill-group"><b>${layer}</b> ${sub}</span>`);
+    }
+    if (parts.length === 0) return '<span class="wf-audit-empty">No audit rows yet — click ▶ Run.</span>';
+    return parts.join('');
+  }
+  function renderAuditRow(r) {
+    const ts = (r.ts || '').replace('T', ' ').slice(0, 23);
+    const vCls = ('v-' + String(r.verdict || '').toLowerCase());
+    const risk = (typeof r.risk_score === 'number' ? r.risk_score.toFixed(2) : '—');
+    return `<tr>
+      <td class="wf-audit-ts">${escapeHTML(ts)}</td>
+      <td>${escapeHTML(r.ce_slug || '—')}</td>
+      <td class="wf-audit-layer wf-audit-layer-${escAttr(r.layer)}">${escapeHTML(r.layer)}</td>
+      <td class="wf-audit-verdict ${vCls}">${escapeHTML(r.verdict)}</td>
+      <td>${risk}</td>
+      <td>${escapeHTML(r.matched_rule || '—')}</td>
+      <td class="wf-audit-deny">${escapeHTML(r.deny_message || '')}</td>
+    </tr>`;
+  }
+  function escAttr(s) { return String(s || '').replace(/[^a-z0-9]/gi, ''); }
 
   // ── ⚡ Load demo project — one-click 6-CE bootstrap ──────────────
   // POSTs /api/crafter/bootstrap-demo (server seeds the health-insurance-claim

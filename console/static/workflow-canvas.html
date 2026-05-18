@@ -102,6 +102,8 @@
       <button id="wf-run-btn"  class="wf-btn wf-btn-accent" title="Execute the workflow (L1/L2 audit per menu toggles)">▶ Run</button>
       <button id="wf-deploy-btn" class="wf-deploy-btn" disabled
               title="Run a test first to enable Deploy">Deploy now</button>
+      <button id="wf-audit-btn" class="wf-btn wf-btn-ghost" type="button"
+              title="Open the SQLite audit log — every L0/L1/L2/L3 verdict for this workflow">📋 Audit log</button>
       <button id="lock-btn" class="lock-btn" type="button" title="Return to cover / lock the session">🔒 Lock</button>
       <!-- WP-AO-51: hamburger menu — Load/Save + audit toggles (secondary actions) -->
       <div class="wf-menu-wrapper">
@@ -199,6 +201,68 @@
     <div class="wf-ce-modal-card">
       <button id="wf-ce-modal-close" class="wf-ce-modal-close" title="Close (Esc)">×</button>
       <iframe id="wf-ce-modal-frame" class="wf-ce-modal-frame" title="CE viewer"></iframe>
+    </div>
+  </div>
+
+  <!-- WP-01 Audit Log modal — surfaces the SQLite layer_audit_log table -->
+  <div id="wf-audit-modal" class="wf-audit-modal hidden" role="dialog" aria-modal="true">
+    <div class="wf-audit-modal-card">
+      <button id="wf-audit-modal-close" class="wf-audit-modal-close" title="Close (Esc)">×</button>
+      <h3 class="wf-audit-modal-title">📋 Audit Log <span id="wf-audit-modal-wf"></span></h3>
+      <p class="wf-audit-modal-sub">Every L0/L1/L2/L3 verdict, persisted to <code>SQLite · layer_audit_log</code>. Regulator-readable.</p>
+
+      <div class="wf-audit-summary" id="wf-audit-summary">—</div>
+
+      <div class="wf-audit-controls">
+        <label>Layer
+          <select id="wf-audit-layer">
+            <option value="all">All</option>
+            <option value="L0">L0 — ingress</option>
+            <option value="L1">L1 — P-check</option>
+            <option value="L2">L2 — O-check</option>
+            <option value="L3">L3 — egress</option>
+          </select>
+        </label>
+        <label>Verdict
+          <select id="wf-audit-verdict">
+            <option value="all">All</option>
+            <option value="ALLOW">ALLOW</option>
+            <option value="LOG">LOG</option>
+            <option value="DENY">DENY</option>
+            <option value="SUCCESS">SUCCESS</option>
+            <option value="FAILURE">FAILURE</option>
+          </select>
+        </label>
+        <label>Limit
+          <select id="wf-audit-limit">
+            <option value="100">100</option>
+            <option value="200" selected>200</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+          </select>
+        </label>
+        <button id="wf-audit-refresh" class="wf-btn wf-btn-accent">↻ Refresh</button>
+        <span id="wf-audit-status" class="wf-audit-status"></span>
+      </div>
+
+      <div class="wf-audit-table-wrap">
+        <table class="wf-audit-table">
+          <thead>
+            <tr>
+              <th>ts</th>
+              <th>ce_slug</th>
+              <th>layer</th>
+              <th>verdict</th>
+              <th>risk</th>
+              <th>matched_rule</th>
+              <th>deny_message</th>
+            </tr>
+          </thead>
+          <tbody id="wf-audit-tbody">
+            <tr><td colspan="7" class="wf-audit-empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
