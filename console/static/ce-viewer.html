@@ -22,7 +22,26 @@
       background: var(--bg); color: var(--text); padding: 24px; line-height: 1.5;
     }
     .wrap { max-width: 980px; margin: 0 auto; }
-    header { margin-bottom: 20px; }
+    header { margin-bottom: 20px; position: relative; }
+    /* Contract Viewer panel styles */
+    .cv-meta-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+    .cv-pill {
+      display: inline-flex; align-items: center;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 999px; padding: 3px 10px;
+      font-size: 0.72rem; color: var(--text-dim);
+    }
+    .cv-h { margin: 14px 0 6px; font-size: 0.85rem; color: var(--accent); letter-spacing: 0.5px; text-transform: uppercase; }
+    .cv-h-sub { color: var(--text-dim); font-weight: normal; text-transform: none; letter-spacing: normal; font-size: 0.92em; }
+    .cv-block {
+      margin: 0; padding: 10px 12px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 4px;
+      font-size: 0.78rem; font-family: ui-monospace, monospace;
+      max-height: 280px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+      color: #cbd5e1;
+    }
+    .cv-list { margin: 0; padding-left: 22px; }
+    .cv-list li { font-size: 0.82rem; color: #cbd5e1; margin: 2px 0; }
     .brand { color: var(--text-dim); font-size: 0.9rem; margin: 0 0 6px; }
     .brand a { color: var(--accent); text-decoration: none; }
     h1 { margin: 0 0 8px; font-size: 1.6rem; color: var(--accent); }
@@ -113,7 +132,22 @@
       <p class="brand"><a href="/">GEM²-Crafter</a> · Contract-Executor Viewer</p>
       <h1 id="title">CE Viewer</h1>
       <p class="sub">Endpoint: <code id="api-display">—</code></p>
+      <button id="contract-viewer-btn" type="button"
+              style="position:absolute;top:18px;right:60px;padding:6px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:0.85rem;">
+        Contract viewer
+      </button>
     </header>
+
+    <!-- Contract panel — hidden by default; toggled by #contract-viewer-btn -->
+    <section id="contract-panel" class="card" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h2 style="margin:0;">📜 Contract (TPMN 5-block)</h2>
+        <span id="contract-meta" style="font-size:0.78em;color:#94a3b8;"></span>
+      </div>
+      <div id="contract-body" style="margin-top:10px;">
+        <p class="status" style="font-size:0.85em;">Loading contract…</p>
+      </div>
+    </section>
 
     <div id="auth-gate" class="card" style="display:none;">
       <h2>Access required</h2>
@@ -137,8 +171,11 @@
         <pre id="standard-sample" style="margin-top:6px;padding:8px;background:#0b1220;border-radius:4px;font-size:0.78em;max-height:200px;overflow:auto;color:#cbd5e1;">// load…</pre>
       </details>
 
-      <h2 style="margin-top:14px;">Reference data (JSON, optional)</h2>
-      <textarea id="ref-input" style="min-height:100px;">{}</textarea>
+      <!-- Reference data textarea removed 2026-05-19 — CESpec.ReferenceData
+           is auto-prefetched server-side from SQLite into the CE LLM call;
+           the textarea was unused for the demo. Hidden input kept so any
+           JS that reads its value doesn't crash. -->
+      <input type="hidden" id="ref-input" value="{}">
 
       <div class="row">
         <button id="submit-btn">Run CE</button>
@@ -601,6 +638,73 @@
       finally { btn.disabled = false; btn.textContent = "Reset"; }
     }
 
+    // ── Contract Viewer button — toggles the contract panel + fetches CESpec ──
+    let contractLoaded = false;
+    function escContract(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function renderContract(spec) {
+      const fmtVal = (v) => {
+        if (v == null) return "<em>—</em>";
+        if (typeof v === "string") return "<pre class='cv-block'>" + escContract(v) + "</pre>";
+        return "<pre class='cv-block'>" + escContract(JSON.stringify(v, null, 2)) + "</pre>";
+      };
+      const fmtList = (arr) => {
+        if (!arr || !arr.length) return "<em>(none)</em>";
+        return "<ul class='cv-list'>" + arr.map((s) => "<li>" + escContract(s) + "</li>").join("") + "</ul>";
+      };
+      return `
+        <div class='cv-meta-row'>
+          <span class='cv-pill'>Trust gates: L0=${spec.trust_gate_l0 ?? "—"} · L1=${spec.trust_gate_l1 ?? "—"} · L2=${spec.trust_gate_l2 ?? "—"} · L3=${spec.trust_gate_l3 ?? "—"}</span>
+          <span class='cv-pill'>Model: ${escContract(spec.vultr_model || "default")}</span>
+          <span class='cv-pill'>Agent: ${escContract(spec.agent_role || "—")}</span>
+          <span class='cv-pill'>Type: ${escContract(spec.stage_type || "—")}</span>
+        </div>
+        <h3 class='cv-h'>A &nbsp;<span class='cv-h-sub'>(input schema)</span></h3>
+        ${fmtVal(spec.a)}
+        <h3 class='cv-h'>P_pre &nbsp;<span class='cv-h-sub'>(${(spec.p_pre || []).length} preconditions)</span></h3>
+        ${fmtList(spec.p_pre)}
+        <h3 class='cv-h'>F &nbsp;<span class='cv-h-sub'>(contract body / CE system prompt)</span></h3>
+        ${fmtVal(spec.f_block)}
+        <h3 class='cv-h'>B &nbsp;<span class='cv-h-sub'>(output schema)</span></h3>
+        ${fmtVal(spec.b)}
+        <h3 class='cv-h'>P_post &nbsp;<span class='cv-h-sub'>(${(spec.p_post || []).length} postconditions)</span></h3>
+        ${fmtList(spec.p_post)}
+      `;
+    }
+    async function toggleContract() {
+      const panel = document.getElementById("contract-panel");
+      if (!panel) return;
+      const slug = parseCESlug();
+      const key = getKey();
+      if (!slug || !key) return;
+      if (panel.style.display !== "none" && contractLoaded) {
+        panel.style.display = "none";
+        return;
+      }
+      panel.style.display = "block";
+      if (contractLoaded) return;
+      const body = document.getElementById("contract-body");
+      const meta = document.getElementById("contract-meta");
+      body.innerHTML = "<p class='status' style='font-size:0.85em;'>Loading contract…</p>";
+      try {
+        const res = await fetch(`/api/workflow/ce-contract?slug=${encodeURIComponent(slug.wf + "/" + slug.stage)}`, {
+          headers: { "X-Access-Key": key }
+        });
+        if (!res.ok) {
+          body.innerHTML = "<p class='status err' style='font-size:0.85em;'>Failed to load contract: HTTP " + res.status + "</p>";
+          return;
+        }
+        const spec = await res.json();
+        if (meta) meta.textContent = (spec.contract_title || "") + " · " + (spec.workflow_slug || "") + "/" + (spec.stage_slug || "");
+        body.innerHTML = renderContract(spec);
+        contractLoaded = true;
+      } catch (e) {
+        body.innerHTML = "<p class='status err' style='font-size:0.85em;'>Load error: " + escContract(e.message) + "</p>";
+      }
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
       checkAuth();
       document.getElementById("submit-btn").addEventListener("click", runCE);
@@ -609,6 +713,8 @@
       if (saveBtn) saveBtn.addEventListener("click", saveSample);
       const resetBtn = document.getElementById("reset-sample-btn");
       if (resetBtn) resetBtn.addEventListener("click", resetSample);
+      const contractBtn = document.getElementById("contract-viewer-btn");
+      if (contractBtn) contractBtn.addEventListener("click", toggleContract);
       const authInput = document.getElementById("auth-key-input");
       const authBtn   = document.getElementById("auth-submit-btn");
       const authErr   = document.getElementById("auth-error");
