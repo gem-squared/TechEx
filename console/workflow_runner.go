@@ -178,25 +178,6 @@ func RunWorkflow(ctx context.Context, wf WorkflowJSON, input map[string]any, run
 	// node consumes the previous node's output. Input to first node = user input.
 	var payload any = input
 
-	// WP-AO-67 follow-up — if the first node's CE has a judge-edited SampleI
-	// that differs from the OriginalSampleI, prefer that as the workflow input.
-	// Lets judges click Save in the CE viewer and see their value flow through
-	// the next canvas Run. Caller-provided `input` is the fallback (matches
-	// the legacy scenario-picker flow).
-	if len(order) > 0 {
-		firstNode := nodeByID[order[0]]
-		if wfSlug, stageSlug := splitCESlug(firstNode.CESlug); wfSlug != "" && stageSlug != "" {
-			if spec, lerr := loadCESpec(wfSlug, stageSlug); lerr == nil && spec != nil &&
-				spec.SampleI != "" && spec.OriginalSampleI != "" && spec.SampleI != spec.OriginalSampleI {
-				var edited any
-				if jerr := json.Unmarshal([]byte(spec.SampleI), &edited); jerr == nil {
-					log.Printf("[WORKFLOW-RUN] using judge-edited SampleI for %s as workflow input (override)", firstNode.CESlug)
-					payload = edited
-				}
-			}
-		}
-	}
-
 	for _, nodeID := range order {
 		node := nodeByID[nodeID]
 
@@ -206,6 +187,24 @@ func RunWorkflow(ctx context.Context, wf WorkflowJSON, input map[string]any, run
 			emit(RunEvent{Phase: "end", Error: "canceled"})
 			return RunHaltedL1 // treat as halt-before-execution
 		default:
+		}
+
+		// WP-01 2026-05-19 — judge-injection point at EVERY node.
+		// If THIS node's CE has SampleI != OriginalSampleI, treat the edited
+		// sample as the runtime input override (previous-node output is
+		// discarded for THIS node). Lets judges paste adversarial JSON into
+		// any CE viewer Save and have it scanned by THAT node's L0.
+		// Previously only the first node honored SampleI; middle-node Saves
+		// were silently bypassed because the chain forwarded prev_output.
+		if wfSlug, stageSlug := splitCESlug(node.CESlug); wfSlug != "" && stageSlug != "" {
+			if spec, lerr := loadCESpec(wfSlug, stageSlug); lerr == nil && spec != nil &&
+				spec.SampleI != "" && spec.OriginalSampleI != "" && spec.SampleI != spec.OriginalSampleI {
+				var edited any
+				if jerr := json.Unmarshal([]byte(spec.SampleI), &edited); jerr == nil {
+					log.Printf("[WORKFLOW-RUN] using judge-edited SampleI for %s as node input (override)", node.CESlug)
+					payload = edited
+				}
+			}
 		}
 
 		out, halt, phase, err := runNode(ctx, node, payload, runID, loopbackBase, authKey, wf.WorkflowSlug, wf.auditL1Enabled(), wf.auditL2Enabled(), emit)
