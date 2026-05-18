@@ -105,8 +105,10 @@
       <button id="wf-audit-btn" class="wf-btn wf-audit-btn-cta" type="button"
               title="Open the SQLite audit log — every L0/L1/L2/L3 verdict for this workflow">📋 Audit log</button>
       <button id="lock-btn" class="lock-btn" type="button" title="Return to cover / lock the session">🔒 Lock</button>
-      <!-- WP-AO-51: hamburger menu — Load/Save + audit toggles (secondary actions) -->
-      <div class="wf-menu-wrapper">
+      <!-- Hamburger menu hidden 2026-05-19 — click handler unreliable in current
+           build. L1/L2 audit toggles + Load/Save are still wired in JS; they
+           default to enabled. Re-enable by removing style="display:none". -->
+      <div class="wf-menu-wrapper" style="display:none;">
         <button id="wf-menu-btn" class="wf-btn wf-btn-ghost" title="More actions">☰</button>
         <div id="wf-menu-dropdown" class="wf-menu-dropdown hidden" role="menu">
           <button id="wf-load-btn" class="wf-menu-item" role="menuitem">📂 Load workflow</button>
