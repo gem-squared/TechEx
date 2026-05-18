@@ -422,50 +422,46 @@ func ltInspect(content string) LTResult {
 		DurationMs: elapsed,
 	}
 
+	// Parse the binary's JSON output if present. When the binary is absent
+	// (TechEx pure-Go deploy — no bin/lobstertrap-*), stdout is empty and we
+	// skip this whole block. The escalators below ARE the verdict authority
+	// in that case; they must run unconditionally.
 	out := string(stdout)
 	jsonStart := strings.Index(out, "{")
 	jsonEnd := strings.LastIndex(out, "}") + 1
-	if jsonStart == -1 || jsonEnd <= jsonStart {
-		return result
-	}
-
-	var meta map[string]interface{}
-	if err := json.Unmarshal([]byte(out[jsonStart:jsonEnd]), &meta); err != nil {
-		return result
-	}
-
-	rawJSON := json.RawMessage(out[jsonStart:jsonEnd])
-	result.Raw = rawJSON
-
-	if rs, ok := meta["risk_score"].(float64); ok {
-		result.RiskScore = rs
-	}
-
-	for _, ff := range flagFields {
-		if val, ok := meta[ff.field].(bool); ok && val {
-			result.Flags = append(result.Flags, ff.label)
+	if jsonStart >= 0 && jsonEnd > jsonStart {
+		var meta map[string]interface{}
+		if err := json.Unmarshal([]byte(out[jsonStart:jsonEnd]), &meta); err == nil {
+			result.Raw = json.RawMessage(out[jsonStart:jsonEnd])
+			if rs, ok := meta["risk_score"].(float64); ok {
+				result.RiskScore = rs
+			}
+			for _, ff := range flagFields {
+				if val, ok := meta[ff.field].(bool); ok && val {
+					result.Flags = append(result.Flags, ff.label)
+				}
+			}
+			// Parse policy decision from stderr / trailing-stdout.
+			policyOutput := stderr
+			if policyOutput == "" {
+				policyOutput = out[jsonEnd:]
+			}
+			for _, line := range strings.Split(policyOutput, "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "Action:") {
+					result.Verdict = strings.TrimSpace(strings.SplitN(line, ":", 2)[1])
+				} else if strings.HasPrefix(line, "Rule:") {
+					result.MatchedRule = strings.TrimSpace(strings.SplitN(line, ":", 2)[1])
+				} else if strings.HasPrefix(line, "Message:") {
+					result.DenyMessage = strings.TrimSpace(strings.SplitN(line, ":", 2)[1])
+				}
+			}
 		}
 	}
 
-	// Parse policy decision from stderr
-	policyOutput := stderr
-	if policyOutput == "" {
-		policyOutput = out[jsonEnd:]
-	}
-	for _, line := range strings.Split(policyOutput, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "Action:") {
-			result.Verdict = strings.TrimSpace(strings.SplitN(line, ":", 2)[1])
-		} else if strings.HasPrefix(line, "Rule:") {
-			result.MatchedRule = strings.TrimSpace(strings.SplitN(line, ":", 2)[1])
-		} else if strings.HasPrefix(line, "Message:") {
-			result.DenyMessage = strings.TrimSpace(strings.SplitN(line, ":", 2)[1])
-		}
-	}
-
-	// Pure-Go escalators — run AFTER binary policy. Can upgrade ALLOW/LOG → DENY.
-	// On systems WITHOUT the proprietary binary (binary call yielded empty
-	// stdout → result still ALLOW), these escalators ARE the verdict authority.
+	// Pure-Go escalators ALWAYS run, regardless of binary output. They are the
+	// verdict authority on no-binary deploys and an upgrade layer otherwise
+	// (ALLOW/LOG → DENY on compound patterns).
 	framingEscalate(content, &result)
 	emailExfilEscalate(content, &result)
 	injectionEscalate(content, &result)
