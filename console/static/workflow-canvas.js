@@ -954,8 +954,9 @@
         pill.textContent = `L2 ${verdict}${evt.score ? ' · ' + evt.score : ''}`;
         section.classList.remove('running', 'error', 'l2-failure');
         section.classList.add('l2-success');
-        // WP-AO-60 U4 — auto-collapse on success
-        section.classList.add('wf-trace-collapsed');
+        // WP-01 fix 2026-05-19: do NOT auto-collapse on L2 SUCCESS — L3 still
+        // has to run + emit. Collapsing here hides the L3 row inside the
+        // collapsed group. Move the auto-collapse to L3 completion.
       } else if (verdict === 'FAILURE') {
         pill.textContent = `L2 FAILURE${evt.score ? ' · ' + evt.score : ''}`;
         section.classList.remove('running', 'l1-pass', 'l2-success');

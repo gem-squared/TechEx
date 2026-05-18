@@ -14,9 +14,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ── l3Pattern + 14 egress patterns (verbatim from demo-advanced) ────
@@ -179,8 +181,10 @@ func jsonNum(f float64) string {
 // max(render, canonicalize) ≈ canonicalize ≈ 10s, since Vultr render is
 // ~3-5s while Gemini canonicalize is ~10s.
 func l3EgressInspect(finalOutput interface{}, enableLLM bool) map[string]interface{} {
+	t0 := time.Now()
 	scrubbed := scrubExpectedBankingFields(finalOutput)
 	rawJSON, _ := json.Marshal(scrubbed)
+	log.Printf("[L3-EGRESS] start enableLLM=%v rawJSON=%d chars", enableLLM, len(rawJSON))
 
 	// Run render (Vultr) and canonicalize (provider-routed) in parallel.
 	// Render is non-blocking for the verdict: it only enriches the popup
@@ -222,6 +226,7 @@ func l3EgressInspect(finalOutput interface{}, enableLLM bool) map[string]interfa
 		preview = preview[:300] + "..."
 	}
 	if egressRule, matched := l3EgressPreScan(scanContent); matched {
+		log.Printf("[L3-EGRESS] DENY via pre-scan rule=%s elapsed=%dms", egressRule, time.Since(t0).Milliseconds())
 		return map[string]interface{}{
 			"verdict":      "DENY",
 			"risk_score":   0.85,
@@ -235,6 +240,9 @@ func l3EgressInspect(finalOutput interface{}, enableLLM bool) map[string]interfa
 	// Pure-pattern ltInspect — LLM canonicalize already happened in the parallel
 	// goroutine above, so no need to fire a second LLM call here.
 	lt := ltInspect(scanContent)
+	log.Printf("[L3-EGRESS] %s rule=%s risk=%.2f elapsed=%dms render=%d intent_labels=%d",
+		lt.Verdict, lt.MatchedRule, lt.RiskScore, time.Since(t0).Milliseconds(),
+		len(renderedNL), len(ci.IntentLabels))
 	if len(ci.IntentLabels) > 0 {
 		lt.Flags = append(lt.Flags, "llm_intent:"+strings.Join(ci.IntentLabels, ","))
 	}
