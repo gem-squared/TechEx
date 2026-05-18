@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -398,6 +399,7 @@ func runNode(ctx context.Context, node WorkflowNode, input any, runID, loopbackB
 			T:              spec.TrustGateL1,
 			SessionContext: fmt.Sprintf("%s / stage=%s / pre-execution", wfSlug, stageSlug),
 			Provider:       defaultAuditProvider(),
+			GeminiModel:    defaultAuditGeminiModel(),
 			Gem2APIKey:     os.Getenv("GEM2_API_KEY"),
 		}
 		// WP-AO-49 Unit 2 — defensive nil→empty for P. spec.PPre can be nil
@@ -485,6 +487,7 @@ func runNode(ctx context.Context, node WorkflowNode, input any, runID, loopbackB
 		T:              spec.TrustGateL2,
 		SessionContext: fmt.Sprintf("%s / stage=%s / post-execution", wfSlug, stageSlug),
 		Provider:       defaultAuditProvider(),
+		GeminiModel:    defaultAuditGeminiModel(),
 		Gem2APIKey:     os.Getenv("GEM2_API_KEY"),
 	}
 	// WP-AO-49 Unit 2 — defensive nil→empty for P. Same rationale as L1.
@@ -565,6 +568,17 @@ func defaultAuditProvider() string {
 		return v
 	}
 	return "gemini"
+}
+
+// defaultAuditGeminiModel — model used by the L1/L2 audit-gate SaaS when
+// provider=gemini. WP-01 (David 2026-05-19): default to gemini-2.5-pro for
+// the demo (better epistemic verdict quality on contract preconditions).
+// Override via GEM2_GATE_MODEL env. Empty string lets the SaaS pick its own.
+func defaultAuditGeminiModel() string {
+	if v := strings.TrimSpace(os.Getenv("GEM2_GATE_MODEL")); v != "" {
+		return v
+	}
+	return "gemini-2.5-pro"
 }
 
 // injectProviderKey reads the matching env var into the AuditGateRequest.
