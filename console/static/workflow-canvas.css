@@ -1099,7 +1099,7 @@ body.wf-dragging-v, body.wf-dragging-v * { cursor: row-resize !important; user-s
 .gate-cover.hidden { display: none; }
 
 .gate-content {
-  max-width: 680px;
+  max-width: 980px;
   width: 100%;
   text-align: center;
   padding: 32px;
