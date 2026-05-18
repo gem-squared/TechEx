@@ -90,67 +90,86 @@ through-ai/demo-advanced`.
 - State: SUCCESS
 - Truth: deferred (no /verify-by-gem2 needed for an init commit)
 
-### 2. Port Lobster Trap L0 (ingress) primitives | STATUS: PENDING
-- A: TechEx currently has L1 + L2 only — same as parent. Track-1 narrative requires Lobster Trap on BOTH sides of the existing audit-gate. No LT code exists in TechEx today.
-- B: New file `console/lobstertrap.go` with:
-  - `LTMetadata`, `LTResult`, `CanonicalIntent` struct definitions (verbatim from demo-advanced/console/lobstertrap.go:25-58, 784-798)
-  - `ltInspect(content)` — **pure-Go regex policy** (NOT the proprietary `bin/lobstertrap-*` binary). Port the 5 escalators (`framingEscalate`, `emailExfilEscalate`, `injectionEscalate`, `paraphraseEscalate`, `ransomwareEuphemismEscalate`) + `normalizeConfusables` + `hasObfuscationMarker`. The metadata fields stay (filled by Go-side scan instead of binary stdout).
-  - `ltSemanticCanonicalize(content, modelOverride, schemaHint...)` — Vultr DeepSeek-V3.2 call. Reuse `vultrSheepCall` if signature matches; otherwise inline a 30s-timeout HTTP POST to Vultr with the demo-advanced safety-classifier system prompt (lobstertrap.go:801-837).
-  - `canonicalIntentScanText(ci)` — translates Vultr intent labels (malware/ransomware/phishing/policy_manipulation/etc.) into regex-matchable phrases, fed back to `ltInspect` so deterministic policy stays source-of-truth.
-  - `ltInspectWithLLM(content, enableLLM, model)` — composes the three: regex DPI on `original + "\n\n[LLM_CANONICAL_INTENT]\n" + synthesized`.
-- P: `console/audit_gate_client.go` already has Vultr-call patterns to crib from for HTTP client + retry shape. Vultr key already in systemd unit.
-- Clarity: 80% (open question: bundle proprietary LT binary or commit fully to pure-Go regex policy? — recommend pure-Go for an open hackathon)
-- Tags: [porting-lobster-trap, regex-policy-pure-go, llm-as-signal]
+### 2. Port Lobster Trap L0 (ingress) primitives — Gemini default, Vultr switchable | STATUS: PENDING
+- A: TechEx has L1 + L2 only. Track-1 needs Lobster Trap on both sides of the audit-gate. Source: `gem-squared-transforming-enterprise-through-ai/demo-advanced/console/{lobstertrap.go,stage_layer.go}`. David spec (2026-05-19): canonicalizer LLM = `gemini-2.5-flash` by default; switchable to Vultr DeepSeek via `.env` (`LT_LLM_PROVIDER=vultr`).
+- B: New file `console/lobstertrap.go` with (verbatim where unchanged from demo-advanced):
+  - Struct definitions: `LTMetadata`, `LTResult`, `CanonicalIntent` (lobstertrap.go:25-58, 784-798).
+  - `ltInspect(content)` — pure-Go regex policy (lobstertrap.go:488); 5 escalators (`framingEscalate`, `emailExfilEscalate`, `injectionEscalate`, `paraphraseEscalate`, `ransomwareEuphemismEscalate`) + `normalizeConfusables` + `hasObfuscationMarker`.
+  - `vultrSemanticCanonicalize(content, model, schemaHint...)` — exact port of `ltSemanticCanonicalize` (lobstertrap.go:947): Vultr REST POST with safety-classifier system prompt, 30s timeout.
+  - `geminiSemanticCanonicalize(content, model, schemaHint...)` — NEW. Wraps existing `geminiGenerate(apiKey, model, prompt)` (llm_exec.go:426); uses Gemini's `responseSchema` config for guaranteed CanonicalIntent JSON. Same return type as Vultr version.
+  - `ltSemanticCanonicalize(content, schemaHint...)` — router. Reads `LT_LLM_PROVIDER` env (default `gemini`); dispatches to gemini or vultr branch; on gemini path uses `gemini-2.5-flash` (overridable via `LT_GEMINI_MODEL`).
+  - `canonicalIntentScanText(ci)` — translates intent labels into regex-matchable phrases (lobstertrap.go).
+  - `ltInspectWithLLM(content, enableLLM)` — composes: regex DPI on `original + "\n\n[LLM_CANONICAL_INTENT]\n" + synthesized`. Verdict shape preserved 3-state ALLOW/LOG/DENY internally; UI maps LOG→ALLOW visually but persists LOG events to SQLite via U4 logger.
+- P: `console/llm_exec.go` already exposes `geminiGenerate(apiKey, model, prompt)` — model can be any string. `audit_gate_client.go` shows Vultr HTTP-call shape for crib. `VULTR_INFERENCE_API_KEY` + `GEMINI_API_KEY` both available in systemd env.
+- Clarity: 92%
+- Tags: [porting-lobster-trap, dual-llm-provider-router, regex-policy-pure-go]
 - Result:
 - State:
 
-### 3. Port L3 (egress) primitives + scrubber | STATUS: PENDING
-- A: L3 is the egress mirror of L0 — JSON output → mask PII → Vultr render to ≤300-char NL summary → regex pre-scan for credential-leak / wire-fraud / exfil-channel patterns → pattern Lobster Trap on the rendered NL + raw JSON.
+### 3. Port L3 (egress) primitives — same dual-LLM router | STATUS: PENDING
+- A: L3 mirrors L0 on the egress side. JSON output → mask PII → render to ≤300-char NL summary (Gemini default, Vultr switchable) → regex pre-scan → Lobster Trap on rendered NL + raw JSON. Source: `demo-advanced/console/{lobstertrap.go,workflow_gates.go,stage_layer.go}`.
 - B: New file `console/lt_egress.go` with:
-  - `l3EgressInspect(finalOutput, enableLLM, model)` — entry point, returns same LTResult shape as L0.
-  - `vultrRenderJSONasNL(jsonOutput, model)` — Vultr "SAFETY-AWARE RENDERER" prompt (lobstertrap.go:860-869 verbatim — keeps numeric fields, masks account numbers, no instruction verbs).
-  - `l3EgressPreScan(nl)` — regex pre-scan with the 14 demo-advanced patterns: 3× wire-fraud, 8× credential-leak (incl. JWT / RSA private key / AWS / OpenAI sk- / Stripe / GitHub PAT), 1× exfil-channel.
-  - `scrubExpectedBankingFields(v)` — GENERALIZED: instead of demo-advanced's hardcoded `disbursement_account` drop, walk the CESpec.B schema and drop any field with a `# pii` or `# legitimate-routing-data` comment annotation. Otherwise the SETT-/CLM-shaped legitimate disbursement fields trigger the credential-leak regex.
-  - `l3DecodeStego(nl)` — decode appended base64/hex strings before scanning so encoded credentials are caught.
-- P: U2 must land first (shares LTResult, ltInspect, vultrSheepCall).
-- Clarity: 85%
-- Tags: [porting-egress-scan, generalizing-scrubber-from-cespec, decoding-stego]
+  - `runLayerL3(executedOutput, enableLLM)` — entry point (stage_layer.go:298 shape); returns LTResult + render artifacts.
+  - `l3EgressInspect(finalOutput, enableLLM)` — orchestrator (workflow_gates.go:911): scrub → render → preScan → ltInspectWithLLM on rendered+raw.
+  - `vultrRenderJSONasNL(jsonOutput, model)` — verbatim port (lobstertrap.go:871): Vultr "SAFETY-AWARE RENDERER" prompt, ≤300 chars, masks account numbers, no instruction verbs.
+  - `geminiRenderJSONasNL(jsonOutput, model)` — NEW. Gemini parallel of the above; same system-prompt text wrapped via `geminiGenerate`. Default model = `gemini-2.5-flash`.
+  - `renderJSONasNL(jsonOutput)` — router. Same `LT_LLM_PROVIDER` dispatch as U2.
+  - `l3EgressPreScan(nl)` — regex pre-scan with the 14 demo-advanced patterns (workflow_gates.go:825): 3× wire-fraud, 8× credential-leak (JWT / RSA private key / AWS / OpenAI sk- / Stripe / GitHub PAT), 1× exfil-channel.
+  - `scrubExpectedBankingFields(v)` — verbatim port (workflow_gates.go:313); masks legitimate disbursement fields so SETT-/CLM-shaped routing data doesn't trigger credential-leak regex.
+  - `l3DecodeStego(nl)` — decode appended base64/hex strings before scanning.
+- P: U2 must land first (shares `LTResult`, `ltInspect`, `ltInspectWithLLM`, `LT_LLM_PROVIDER` router).
+- Clarity: 90%
+- Tags: [porting-egress-scan, dual-llm-render, decoding-stego]
 - Result:
 - State:
 
-### 4. Wire L0 + L3 into workflow_runner | STATUS: PENDING
-- A: `runNode` in workflow_runner.go is currently L1 → EXEC → L2 (lines 298-438). Need to wrap that with L0 (before L1) and L3 (after L2).
-- B: New phases emitted in the RunEvent stream: `l0_running` / `l0_completed` (verdict ALLOW/LOG/DENY + risk_score + matched_rule), and `l3_running` / `l3_completed`. Sequencing semantics:
-  - L0 DENY → emit `halted_l0` final status; L1/F/L2/L3 SKIPPED.
-  - L0 LOG → proceed but flag in trace.
-  - L1 DENY → halted_l1 (existing semantics).
-  - L2 FAILURE → halted_l2; L3 SKIPPED.
-  - L3 DENY → halted_l3 with final-status code. Output NOT forwarded downstream.
-  - L3 LOG → proceed but flag.
-- P: U2 + U3 expose `ltInspectWithLLM` and `l3EgressInspect`.
+### 4. Wire L0 + L3 into workflow_runner + SQLite audit log | STATUS: PENDING
+- A: `runNode` in workflow_runner.go currently runs L1 → EXEC → L2. Wrap with L0 (before L1) and L3 (after L2). All verdicts persisted to a new SQLite table `layer_audit_log` in the per-project workspace DB (same DB that bootstrap-demo seeds with `accredited_providers` etc.).
+- B:
+  - **SQLite migration** in `console/db.go` (or wherever the per-project DB init runs): create `layer_audit_log` if not exists. Columns: `id INTEGER PRIMARY KEY AUTOINCREMENT`, `ts TEXT`, `run_id TEXT`, `stage_id INTEGER`, `ce_slug TEXT`, `layer TEXT CHECK (layer IN ('L0','L1','L2','L3'))`, `verdict TEXT`, `risk_score REAL`, `matched_rule TEXT`, `flags_json TEXT`, `deny_message TEXT`, `payload_json TEXT`. Indices on `(run_id, stage_id)` and `(layer, verdict)`.
+  - New helper `appendLayerAuditLog(runID, stageID, ceSlug, layer string, ltResult LTResult, payload interface{})` — single INSERT per verdict.
+  - `runNode` modification:
+    - Before L1: call `ltInspectWithLLM` on nlPrompt → emit `l0_running` then `l0_completed` RunEvent with `{verdict, risk_score, matched_rule, flags, deny_message}`. Persist to audit log.
+    - L0 verdict logic (3-state preserved internally, halt logic binary):
+      - DENY → emit `halted_l0`; SKIP L1, F, L2, L3; mark node terminal.
+      - LOG → continue (treat as ALLOW for sequencing); flagged in trace + persisted to SQLite.
+      - ALLOW → continue.
+    - After L2: call `l3EgressInspect` on F output → emit `l3_running` then `l3_completed`. Persist.
+    - L3 verdict logic:
+      - DENY → emit `halted_l3`; node output NOT forwarded to downstream nodes.
+      - LOG → output forwarded; flagged + persisted.
+      - ALLOW → forwarded normally.
+  - L0/L3 are skipped (with `l*_skipped` event) when the CESpec's `TrustGateL0`/`TrustGateL3` field is 0 — preserves opt-out path per CE.
+- P: U2 + U3 expose `ltInspectWithLLM`, `l3EgressInspect`. U6 adds `TrustGateL0`/`TrustGateL3` to CESpec (so threshold lookup compiles).
 - Clarity: 88%
-- Tags: [wiring-five-gate-chain, run-event-phases, sequencing-semantics]
+- Tags: [wiring-five-gate-chain, sqlite-audit-log, halt-semantics-binary]
 - Result:
 - State:
 
-### 5. Canvas UI — render L0 + L3 trace rows + node-state classes | STATUS: PENDING
-- A: Canvas trace rows currently render L1 / EXEC / L2. CE-node has border-color classes for L1-pass/deny + L2-success/failure. Need parallel UI for L0/L3.
-- B: `workflow-canvas.html` + `workflow-canvas.js`:
-  - 4 new RunEvent phase handlers (`l0`, `l3` running + completed)
-  - 4 new node-state CSS classes: `.wf-l0-pass`, `.wf-l0-deny`, `.wf-l3-pass`, `.wf-l3-deny` mirroring the L1/L2 styling
-  - Combined-state selector: `.wf-l0-pass.wf-l1-pass.wf-l2-success.wf-l3-pass` → dark green background (currently `.wf-l1-pass.wf-l2-success` does this)
-  - Trust-gate chip in node header gets two more pills: `L0 <threshold>` and `L3 <threshold>` (read from CESpec; default 60 for now)
-- P: U4 emits the new phase events.
-- Clarity: 82%
-- Tags: [extending-canvas-trace, adding-lt-node-states, five-gate-chips]
+### 5. Canvas UI — L0/L3 chips + clickable layer popup modal | STATUS: PENDING
+- A: Canvas trace rows currently render L1 / EXEC / L2. CE-node has border classes for L1-pass/deny + L2-success/failure. Need (1) parallel L0/L3 chips + trace rows; (2) **NEW**: clicking any trust-gate chip (L0/L1/L2/L3) opens a styled modal showing that layer's verdict summary + detailed payload — popup ONLY when verdict is negative/issue (DENY or LOG); ALLOW verdicts visible in trace strip only.
+- B: `workflow-canvas.html` + `workflow-canvas.js` + `workflow-canvas.css`:
+  - **Trace + chips**: 4 new RunEvent phase handlers (`l0`/`l3` running + completed); 4 new node-state CSS classes (`.wf-l0-pass`, `.wf-l0-deny`, `.wf-l3-pass`, `.wf-l3-deny`); combined-state selector `.wf-l0-pass.wf-l1-pass.wf-l2-success.wf-l3-pass` → dark green; node header gains `L0 <threshold>` + `L3 <threshold>` pills.
+  - **NEW Layer Popup Modal** — reuse `wf-deploy-modal` styling pattern (separate CSS class `wf-layer-modal`):
+    - Container: hidden `<div id="wf-layer-modal" class="wf-layer-modal hidden">` with title row, summary block, expandable "Detailed payload" accordion (`<details>`), and Close button.
+    - Trigger: click handler on `.wf-trust-chip` elements (data attrs `data-layer`, `data-node-id` → look up stored verdict from `latestLayerResults[nodeID][layer]`).
+    - **Show condition**: chip click opens modal IFF the layer's verdict ∈ {DENY, LOG}; ALLOW verdict clicks → tiny toast "ALLOW (no issues)".
+    - **Summary block fields** per layer:
+      - L0/L3: verdict (color-coded), risk_score (0-100 bar), matched_rule, brief deny_message.
+      - L1/L2: verdict, score, top reason, ledger_diagnostic.verdict.
+    - **Detailed accordion** shows full LTResult / audit-gate response as pretty-printed JSON.
+  - `latestLayerResults` Map: `nodeID → { L0: result, L1: result, L2: result, L3: result }`, updated on each `l*_completed` event.
+- P: U4 emits the new phase events with `verdict`, `risk_score`, `matched_rule`, `flags`, `deny_message`, `payload` fields.
+- Clarity: 85%
+- Tags: [extending-canvas-trace, adding-layer-chips, popup-on-issue-only]
 - Result:
 - State:
 
 ### 6. New trust_gate_L0 / trust_gate_L3 fields on CESpec + contracts | STATUS: PENDING
 - A: CESpec has `TrustGateL1` + `TrustGateL2` int fields parsed from `## Circus Executor` block. Contracts now need analogous thresholds for L0/L3.
-- B: Add `TrustGateL0` and `TrustGateL3` to `CESpec` struct. Parser extracts them from the same Circus Executor block. Default to 60 (matching current L1/L2). Each of the 6 health-insurance contracts gets two new lines.
-- P: U4 needs these to threshold L0/L3 verdicts.
-- Clarity: 90%
+- B: Add `TrustGateL0` and `TrustGateL3` to `CESpec` struct (default 60). Parser extracts them from the same Circus Executor block. Semantics: 0 = layer skipped; >0 = layer active with DENY when `risk_score >= TrustGate*`. Each of the 6 health-insurance contracts in the demo-bundle gets two new lines (`trust_gate_L0: 60`, `trust_gate_L3: 60`); bootstrap-demo re-seeds them.
+- P: U4 needs these for threshold lookup and skip-when-zero logic.
+- Clarity: 92%
 - Tags: [extending-cespec, parser-tweak, contract-augmentation]
 - Result:
 - State:

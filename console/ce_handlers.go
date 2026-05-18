@@ -540,8 +540,10 @@ func handleCEList(w http.ResponseWriter, r *http.Request) {
 		Domain        string `json:"domain,omitempty"`
 		PPreCount     int    `json:"p_pre_count"`
 		PPostCount    int    `json:"p_post_count"`
+		TrustGateL0   int    `json:"trust_gate_l0"`
 		TrustGateL1   int    `json:"trust_gate_l1"`
 		TrustGateL2   int    `json:"trust_gate_l2"`
+		TrustGateL3   int    `json:"trust_gate_l3"`
 		VultrModel    string `json:"vultr_model"`
 		StageType     string `json:"stage_type,omitempty"`
 		AgentRole     string `json:"agent_role,omitempty"`
@@ -559,8 +561,10 @@ func handleCEList(w http.ResponseWriter, r *http.Request) {
 			Domain:        s.Domain,
 			PPreCount:     len(s.PPre),
 			PPostCount:    len(s.PPost),
+			TrustGateL0:   s.TrustGateL0,
 			TrustGateL1:   s.TrustGateL1,
 			TrustGateL2:   s.TrustGateL2,
+			TrustGateL3:   s.TrustGateL3,
 			VultrModel:    s.resolvedVultrModel(),
 			StageType:     s.StageType,
 			AgentRole:     s.AgentRole,

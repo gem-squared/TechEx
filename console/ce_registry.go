@@ -45,8 +45,10 @@ type CESpec struct {
 	// Circus Executor metadata
 	StageType   string `json:"stage_type,omitempty"`     // deterministic | hybrid | llm-assisted
 	AgentRole   string `json:"agent_role,omitempty"`     // kebab-case slug
+	TrustGateL0 int    `json:"trust_gate_l0"`            // 0-100 (WP-01 U6 — 0 = layer skipped)
 	TrustGateL1 int    `json:"trust_gate_l1"`            // 0-100
 	TrustGateL2 int    `json:"trust_gate_l2"`            // 0-100
+	TrustGateL3 int    `json:"trust_gate_l3"`            // 0-100 (WP-01 U6 — 0 = layer skipped)
 	VultrModel  string `json:"vultr_model,omitempty"`    // empty → registry default
 
 	// Optional reference data (policy ID → text) — orchestrator may populate

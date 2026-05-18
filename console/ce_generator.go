@@ -162,8 +162,10 @@ type CEGenPreview struct {
 	BSummary      string `json:"b_summary"`
 	PPreCount     int    `json:"p_pre_count"`
 	PPostCount    int    `json:"p_post_count"`
+	TrustGateL0   int    `json:"trust_gate_l0"`
 	TrustGateL1   int    `json:"trust_gate_l1"`
 	TrustGateL2   int    `json:"trust_gate_l2"`
+	TrustGateL3   int    `json:"trust_gate_l3"`
 	VultrModel    string `json:"vultr_model"`
 }
 
@@ -310,8 +312,10 @@ func executeCreateCE(args map[string]any, state *CrafterState, sess *SessionData
 		BSummary:      summarize(spec.B, 200),
 		PPreCount:     len(spec.PPre),
 		PPostCount:    len(spec.PPost),
+		TrustGateL0:   spec.TrustGateL0,
 		TrustGateL1:   spec.TrustGateL1,
 		TrustGateL2:   spec.TrustGateL2,
+		TrustGateL3:   spec.TrustGateL3,
 		VultrModel:    spec.resolvedVultrModel(),
 	}
 	registryPath := cePath(spec.WorkflowSlug, spec.StageSlug)

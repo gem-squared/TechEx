@@ -186,6 +186,19 @@
     </div>
   </div>
 
+  <!-- WP-01 U5 Layer popup modal — opens on chip click when verdict ∈ {DENY, LOG} -->
+  <div id="wf-layer-modal" class="wf-layer-modal hidden" role="dialog" aria-modal="true">
+    <div class="wf-layer-modal-card">
+      <button id="wf-layer-modal-close" class="wf-layer-modal-close" title="Close (Esc)">×</button>
+      <h3 id="wf-layer-modal-title" class="wf-layer-modal-title">Layer L0 — ALLOW</h3>
+      <div id="wf-layer-modal-summary" class="wf-layer-modal-summary"></div>
+      <details class="wf-layer-modal-details">
+        <summary>Detailed payload</summary>
+        <pre id="wf-layer-modal-payload" class="wf-layer-modal-payload"></pre>
+      </details>
+    </div>
+  </div>
+
   <!-- WP-AO-39 Deploy collision modal (hidden by default) -->
   <div id="wf-deploy-modal" class="wf-deploy-modal hidden" role="dialog" aria-modal="true">
     <div class="wf-deploy-modal-card">

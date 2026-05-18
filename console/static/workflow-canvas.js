@@ -652,22 +652,26 @@
   function ceCardHTML(ce) {
     const slug = `${ce.workflow_slug}/${ce.stage_slug}`;
     const model = ce.vultr_model || 'default';
+    const l0 = Number.isFinite(ce.trust_gate_l0) ? ce.trust_gate_l0 : 0;
     const l1 = Number.isFinite(ce.trust_gate_l1) ? ce.trust_gate_l1 : 0;
     const l2 = Number.isFinite(ce.trust_gate_l2) ? ce.trust_gate_l2 : 0;
+    const l3 = Number.isFinite(ce.trust_gate_l3) ? ce.trust_gate_l3 : 0;
     const pre = ce.p_pre_count || 0;
     const post = ce.p_post_count || 0;
-    // WP-AO-51 fix: dedicated "CE viewer" strip at the bottom of each
-    // node card. Clicking the strip opens the viewer modal; clicking
-    // anywhere else on the card lets Drawflow handle node drag/select
-    // normally. data-ce-slug attribute lets the global click handler
-    // dispatch to openNodeViewer without binding per-card listeners.
+    // WP-01 U5: trust-gate chips are clickable; click opens the layer popup
+    // modal IFF the chip has a stored verdict that's DENY/LOG (data-clickable).
+    // ALLOW verdicts produce a tiny toast on click ("no issues"). The data-*
+    // attrs let the global click handler dispatch to openLayerModal without
+    // per-chip bindings.
     return `
       <div class="ce-card">
         <h4 class="ce-slug">${escapeHTML(slug)}</h4>
         <div class="ce-model">${escapeHTML(model)}</div>
         <div class="chips">
-          <span class="chip l1" onclick="event.stopPropagation();">L1 ${l1}</span>
-          <span class="chip l2" onclick="event.stopPropagation();">L2 ${l2}</span>
+          <span class="chip l0 wf-trust-chip" data-layer="L0" data-ce-slug="${escapeHTML(slug)}">L0 ${l0}</span>
+          <span class="chip l1 wf-trust-chip" data-layer="L1" data-ce-slug="${escapeHTML(slug)}">L1 ${l1}</span>
+          <span class="chip l2 wf-trust-chip" data-layer="L2" data-ce-slug="${escapeHTML(slug)}">L2 ${l2}</span>
+          <span class="chip l3 wf-trust-chip" data-layer="L3" data-ce-slug="${escapeHTML(slug)}">L3 ${l3}</span>
           <span class="chip pre" onclick="event.stopPropagation();">P_pre · ${pre}</span>
           <span class="chip post" onclick="event.stopPropagation();">P_post · ${post}</span>
         </div>
@@ -676,6 +680,18 @@
         </div>
       </div>
     `;
+  }
+
+  // ── WP-01 U5: per-node latest-layer-results store ────────────────
+  // Map<drawflowNodeID:number, { L0: evt, L1: evt, L2: evt, L3: evt }>
+  // Updated on every l*_completed RunEvent so chip clicks have data to show.
+  const latestLayerResults = new Map();
+  function storeLayerResult(nodeID, layer, evt) {
+    const dfID = parseInt(String(nodeID || '').replace(/^n/, ''), 10);
+    if (!dfID && dfID !== 0) return;
+    let rec = latestLayerResults.get(dfID);
+    if (!rec) { rec = {}; latestLayerResults.set(dfID, rec); }
+    rec[layer] = evt;
   }
 
   // ── Toast helper ─────────────────────────────────────────────────
@@ -822,8 +838,13 @@
   function clearRunState() {
     traceEventCount = 0;
     document.querySelectorAll('.drawflow .drawflow-node').forEach((el) => {
-      el.classList.remove('wf-running', 'wf-l1-pass', 'wf-l1-deny', 'wf-l2-success', 'wf-l2-failure');
+      el.classList.remove('wf-running',
+        'wf-l0-pass', 'wf-l0-deny',
+        'wf-l1-pass', 'wf-l1-deny',
+        'wf-l2-success', 'wf-l2-failure',
+        'wf-l3-pass', 'wf-l3-deny');
     });
+    latestLayerResults.clear();
     const body = $('#wf-trace-body');
     if (body) body.innerHTML = '';
     const banner = $('#wf-trace-banner');
@@ -935,25 +956,30 @@
   }
 
   function handleRunEvent(evt) {
-    // evt fields: phase, node_id, ce_slug, verdict, score, reasons, latency_ms, error, state
+    // evt fields: phase, node_id, ce_slug, verdict, score, reasons, latency_ms, error, state, meta
     traceEventCount++;
     if (evt.node_id) {
       const drawflowID = parseInt(String(evt.node_id).replace(/^n/, ''), 10);
       applyNodeClass(drawflowID, evt);
+      // WP-01 U5 — record latest L0/L1/L2/L3 result for chip-click popup.
+      if (evt.state === 'completed' || (evt.verdict && !evt.state)) {
+        if (evt.phase === 'l0') storeLayerResult(evt.node_id, 'L0', evt);
+        if (evt.phase === 'l1') storeLayerResult(evt.node_id, 'L1', evt);
+        if (evt.phase === 'l2') storeLayerResult(evt.node_id, 'L2', evt);
+        if (evt.phase === 'l3') storeLayerResult(evt.node_id, 'L3', evt);
+      }
     }
 
     // WP-AO-59 — phase-start events render an animated active row keyed by
     // (node_id, phase); the completion event updates the row in place.
-    if (evt.state === 'running' && (evt.phase === 'l1' || evt.phase === 'exec' || evt.phase === 'l2')) {
+    if (evt.state === 'running' && (evt.phase === 'l0' || evt.phase === 'l1' || evt.phase === 'exec' || evt.phase === 'l2' || evt.phase === 'l3')) {
       appendActiveTraceRow(evt);
       return;
     }
 
     appendTraceRow(evt);
-    // WP-AO-58 — advance the top progress bar on each L1/exec/L2 completion
-    // (tool events are sub-events of exec and don't count; phase-start events
-    // are handled above and don't count either).
-    if ((evt.phase === 'l1' || evt.phase === 'exec' || evt.phase === 'l2') &&
+    // WP-AO-58 — advance the top progress bar on each layer completion.
+    if ((evt.phase === 'l0' || evt.phase === 'l1' || evt.phase === 'exec' || evt.phase === 'l2' || evt.phase === 'l3') &&
         evt.state !== 'running') {
       progressIncrement();
     }
@@ -1000,7 +1026,7 @@
     const el = document.getElementById('wf-progress');
     const fill = document.getElementById('wf-progress-fill');
     if (!el || !fill) return;
-    progressExpected = Math.max(1, (totalNodes || 0) * 3); // L1 + exec + L2 per node
+    progressExpected = Math.max(1, (totalNodes || 0) * 5); // L0 + L1 + exec + L2 + L3 per node
     progressCompleted = 0;
     el.classList.remove('hidden', 'success', 'failure');
     el.classList.add('running');
@@ -1042,7 +1068,14 @@
     if (!el) return;
     // Reset just the dynamic classes; preserve user state classes
     el.classList.remove('wf-running');
-    if (evt.phase === 'l1') {
+    if (evt.phase === 'l0') {
+      el.classList.remove('wf-l0-pass', 'wf-l0-deny');
+      if (evt.verdict === 'ALLOW' || evt.verdict === 'SKIPPED') {
+        el.classList.add('wf-l0-pass');
+      } else if (evt.verdict) {
+        el.classList.add('wf-l0-deny');
+      }
+    } else if (evt.phase === 'l1') {
       el.classList.remove('wf-l1-pass', 'wf-l1-deny');
       if (evt.verdict === 'ALLOW') {
         el.classList.add('wf-l1-pass');
@@ -1057,6 +1090,13 @@
         el.classList.add('wf-l2-success');
       } else if (evt.verdict) {
         el.classList.add('wf-l2-failure');
+      }
+    } else if (evt.phase === 'l3') {
+      el.classList.remove('wf-l3-pass', 'wf-l3-deny');
+      if (evt.verdict === 'ALLOW' || evt.verdict === 'SKIPPED') {
+        el.classList.add('wf-l3-pass');
+      } else if (evt.verdict) {
+        el.classList.add('wf-l3-deny');
       }
     }
   }
@@ -1474,6 +1514,7 @@
     populateScenarioPicker();           // WP-AO-41: scenario dropdown
     wirePaletteReload();                // WP-AO-49 Unit 3: manual + postMessage reload
     wireLoadDemoBtn();                  // U9: ⚡ Load demo project header button
+    wireLayerChipClicks();              // WP-01 U5: trust-gate chip → popup modal
     wireHamburgerMenu();                // WP-AO-51: secondary-actions dropdown
     wireZoomControls();                 // WP-AO-51: zoom toolbar + keyboard
     wireNodeClickViewer();              // WP-AO-51: per-node CE viewer modal
@@ -1770,6 +1811,112 @@
     });
   }
 
+  // ── WP-01 U5: trust-gate chip click → layer popup modal ─────────
+  // Chip click reads data-layer + finds the drawflow node ID by walking up
+  // to the parent `.drawflow-node`. Looks up latestLayerResults[nodeID][layer]
+  // and routes to openLayerModal (DENY/LOG) or toast (ALLOW/no-data).
+  function wireLayerChipClicks() {
+    const drawflowEl = document.getElementById('drawflow');
+    if (!drawflowEl) return;
+    drawflowEl.addEventListener('click', (e) => {
+      const chip = e.target.closest('.wf-trust-chip');
+      if (!chip) return;
+      e.stopPropagation(); // don't let Drawflow select-node fire
+      const layer = chip.dataset.layer;
+      const ceSlug = chip.dataset.ceSlug || '';
+      const nodeEl = chip.closest('.drawflow-node');
+      if (!nodeEl) {
+        toast(`${layer}: no run data yet — click ▶ Run first`, 'warn', 2400);
+        return;
+      }
+      const nodeID = parseInt(nodeEl.id.replace(/^node-/, ''), 10);
+      const rec = latestLayerResults.get(nodeID);
+      const evt = rec ? rec[layer] : null;
+      if (!evt) {
+        toast(`${layer}: no run data for this node — click ▶ Run first`, 'warn', 2400);
+        return;
+      }
+      // ALLOW verdicts: tiny toast, no modal (per David spec — popup only on issue).
+      const v = (evt.verdict || '').toUpperCase();
+      if (v === 'ALLOW' || v === 'SUCCESS' || v === 'SKIPPED') {
+        toast(`${layer} ${v} (no issues) — ${ceSlug}`, 'ok', 2400);
+        return;
+      }
+      openLayerModal(layer, ceSlug, evt);
+    });
+
+    // Modal close handlers (Esc + close button + click-outside).
+    const closeBtn = document.getElementById('wf-layer-modal-close');
+    if (closeBtn) closeBtn.addEventListener('click', closeLayerModal);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeLayerModal();
+    });
+    const modal = document.getElementById('wf-layer-modal');
+    if (modal) modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeLayerModal();
+    });
+  }
+
+  function openLayerModal(layer, ceSlug, evt) {
+    const modal = document.getElementById('wf-layer-modal');
+    if (!modal) return;
+    const title = document.getElementById('wf-layer-modal-title');
+    const summary = document.getElementById('wf-layer-modal-summary');
+    const payloadEl = document.getElementById('wf-layer-modal-payload');
+    if (!title || !summary || !payloadEl) return;
+
+    const verdict = (evt.verdict || 'UNKNOWN').toUpperCase();
+    const verdictClass = (verdict === 'DENY' || verdict === 'FAILURE')
+      ? 'verdict-deny'
+      : (verdict === 'LOG' ? 'verdict-log' : 'verdict-allow');
+
+    title.className = 'wf-layer-modal-title ' + verdictClass;
+    title.textContent = `${layer} — ${verdict}  ·  ${ceSlug}`;
+
+    // Build summary fields. L0/L3 carry risk_score / matched_rule / flags;
+    // L1/L2 carry score / reasons / meta. Meta is a JSON.RawMessage from Go;
+    // for L0/L3 that's where risk_score/matched_rule live.
+    let meta = {};
+    try { if (evt.meta) meta = (typeof evt.meta === 'string' ? JSON.parse(evt.meta) : evt.meta); }
+    catch (e) { meta = {}; }
+
+    let rows = '';
+    rows += summaryRow('Verdict', verdict);
+    if (layer === 'L0' || layer === 'L3') {
+      const rs = meta.risk_score ?? evt.risk_score ?? '—';
+      const mr = meta.matched_rule || evt.matched_rule || '—';
+      const dm = meta.deny_message || evt.deny_message || '—';
+      const fl = (meta.flags || evt.flags || []).join(', ') || '—';
+      rows += summaryRow('Risk score', String(rs));
+      rows += summaryRow('Matched rule', mr);
+      rows += summaryRow('Flags', fl);
+      rows += summaryRow('Deny message', dm);
+    } else {
+      const sc = evt.score ?? meta.score ?? '—';
+      const rsn = (evt.reasons || meta.reasons || []).join(' · ') || '—';
+      rows += summaryRow('Score', String(sc));
+      rows += summaryRow('Reasons', rsn);
+    }
+    if (evt.latency_ms) rows += summaryRow('Latency', evt.latency_ms + ' ms');
+    if (evt.timestamp) rows += summaryRow('Timestamp', evt.timestamp);
+    summary.innerHTML = rows;
+
+    payloadEl.textContent = JSON.stringify({ event: evt, meta }, null, 2);
+    modal.classList.remove('hidden');
+  }
+
+  function summaryRow(label, value) {
+    return `<div class="wf-layer-modal-row">
+      <span class="wf-layer-modal-label">${escapeHTML(label)}</span>
+      <span class="wf-layer-modal-value">${escapeHTML(String(value))}</span>
+    </div>`;
+  }
+
+  function closeLayerModal() {
+    const modal = document.getElementById('wf-layer-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
   // ── ⚡ Load demo project — one-click 6-CE bootstrap ──────────────
   // POSTs /api/crafter/bootstrap-demo (server seeds the health-insurance-claim
   // CEs from embedded demo-assets), then reloads the palette and attempts the
@@ -1785,7 +1932,10 @@
         const r = await fetch('/api/crafter/bootstrap-demo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Access-Key': authKey },
-          body: '{}'
+          // force=true so existing CEs get re-seeded with the latest schema
+          // (e.g. WP-01 U6 added trust_gate_l0 / trust_gate_l3 defaults — old
+          // CEs on disk would otherwise stay at trust_gate_*=0 = layer skipped).
+          body: '{"force":true}'
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);

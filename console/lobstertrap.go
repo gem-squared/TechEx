@@ -386,6 +386,19 @@ func stripWordSplitters(s string) string {
 func ltInspect(content string) LTResult {
 	start := time.Now()
 
+	// R14-C1 / R14-C3: defensive DENY for Unicode obfuscation markers BEFORE
+	// any normalization can wash them out.
+	if obfDetected, obfRule := hasObfuscationMarker(content); obfDetected {
+		return LTResult{
+			Verdict:     "DENY",
+			RiskScore:   0.7,
+			MatchedRule: obfRule,
+			DenyMessage: "[LOBSTER TRAP] Blocked: invisible Unicode obfuscation marker present in input.",
+			Flags:       []string{"unicode obfuscation"},
+			DurationMs:  time.Since(start).Seconds() * 1000,
+		}
+	}
+
 	content = normalizeConfusables(content)
 
 	binary := ltBinaryPath()
@@ -449,6 +462,15 @@ func ltInspect(content string) LTResult {
 			result.DenyMessage = strings.TrimSpace(strings.SplitN(line, ":", 2)[1])
 		}
 	}
+
+	// Pure-Go escalators — run AFTER binary policy. Can upgrade ALLOW/LOG → DENY.
+	// On systems WITHOUT the proprietary binary (binary call yielded empty
+	// stdout → result still ALLOW), these escalators ARE the verdict authority.
+	framingEscalate(content, &result)
+	emailExfilEscalate(content, &result)
+	injectionEscalate(content, &result)
+	paraphraseEscalate(content, &result)
+	ransomwareEuphemismEscalate(content, &result)
 
 	return result
 }

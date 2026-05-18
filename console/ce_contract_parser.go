@@ -163,11 +163,24 @@ func parseContractMarkdown(content string) (*CESpec, error) {
 	cxBlock := tpmnExtractSection(content, "## Circus Executor", nextHeading(content, "## Circus Executor"))
 	spec.StageType = extractKeyValue(cxBlock, "stage_type")
 	spec.AgentRole = extractKeyValue(cxBlock, "agent_role")
+	// L0/L1/L2/L3 trust-gate thresholds. WP-01 U6: L0/L3 default to 60 when
+	// the contract's Circus Executor block doesn't name them (most existing
+	// contracts pre-LT integration). 0 explicitly disables that layer.
+	if t0 := extractIntValue(cxBlock, "trust_gate_L0"); t0 >= 0 {
+		spec.TrustGateL0 = t0
+	} else {
+		spec.TrustGateL0 = 60
+	}
 	if t1 := extractIntValue(cxBlock, "trust_gate_L1"); t1 >= 0 {
 		spec.TrustGateL1 = t1
 	}
 	if t2 := extractIntValue(cxBlock, "trust_gate_L2"); t2 >= 0 {
 		spec.TrustGateL2 = t2
+	}
+	if t3 := extractIntValue(cxBlock, "trust_gate_L3"); t3 >= 0 {
+		spec.TrustGateL3 = t3
+	} else {
+		spec.TrustGateL3 = 60
 	}
 	if vm := extractKeyValue(cxBlock, "vultr_model"); vm != "" {
 		spec.VultrModel = vm

@@ -301,14 +301,22 @@ body.wf-page header.wf-header {
   0%, 100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4); }
   50%      { box-shadow: 0 0 0 6px rgba(6, 182, 212, 0); }
 }
+.drawflow .drawflow-node.wf-l0-pass    { box-shadow: 0 0 0 1px var(--green) inset; }
+.drawflow .drawflow-node.wf-l0-deny    { border-color: var(--red); animation: wf-shake 0.3s; }
 .drawflow .drawflow-node.wf-l1-pass    { border-color: var(--green); }
 .drawflow .drawflow-node.wf-l1-deny    { border-color: var(--red); animation: wf-shake 0.3s; }
 .drawflow .drawflow-node.wf-l2-success { border-color: var(--green); }
 .drawflow .drawflow-node.wf-l2-failure { border-color: var(--red); animation: wf-shake 0.3s; }
-/* Both L1 and L2 passed → dark green fill so judges can see at-a-glance
-   which stages are fully green vs which only cleared L1. */
+.drawflow .drawflow-node.wf-l3-pass    { box-shadow: 0 0 0 1px var(--green) inset; }
+.drawflow .drawflow-node.wf-l3-deny    { border-color: var(--red); animation: wf-shake 0.3s; }
+/* All four layers pass → dark-green fill (5-gate full-green at-a-glance). */
+.drawflow .drawflow-node.wf-l0-pass.wf-l1-pass.wf-l2-success.wf-l3-pass {
+  background-color: rgba(16, 185, 129, 0.22);
+  border-color: var(--green);
+}
+/* L1+L2 only (back-compat with WP-AO trace) — kept for graceful upgrade. */
 .drawflow .drawflow-node.wf-l1-pass.wf-l2-success {
-  background-color: rgba(16, 185, 129, 0.18);
+  background-color: rgba(16, 185, 129, 0.14);
   border-color: var(--green);
 }
 @keyframes wf-shake {
@@ -356,8 +364,10 @@ body.wf-page header.wf-header {
   transition: filter 0.15s;
 }
 .ce-card .chip:hover { filter: brightness(1.2); }
+.ce-card .chip.l0   { background: var(--green-bg); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
 .ce-card .chip.l1   { background: var(--green-bg); color: var(--green); }
 .ce-card .chip.l2   { background: var(--green-bg); color: var(--green); }
+.ce-card .chip.l3   { background: var(--green-bg); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
 .ce-card .chip.pre  { background: var(--yellow-bg); color: var(--yellow); }
 .ce-card .chip.post { background: var(--red-bg);   color: var(--red); }
 
@@ -1192,4 +1202,100 @@ body.wf-dragging-v, body.wf-dragging-v * { cursor: row-resize !important; user-s
   .gate-logo { font-size: 2.8rem; }
   .gate-title { font-size: 1.3rem; }
   .gate-btn { width: 100%; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   WP-01 U5 — Layer popup modal (L0/L1/L2/L3 chip click target).
+   Reuses wf-deploy-modal pattern; opens only on DENY/LOG verdicts.
+   ═══════════════════════════════════════════════════════════════════ */
+.wf-layer-modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.wf-layer-modal.hidden { display: none; }
+.wf-layer-modal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-width: 720px; width: 100%;
+  padding: 22px 26px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.wf-layer-modal-close {
+  position: absolute;
+  top: 10px; right: 14px;
+  background: transparent;
+  border: none;
+  font-size: 1.6rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  line-height: 1;
+}
+.wf-layer-modal-close:hover { color: var(--accent); }
+.wf-layer-modal-title {
+  margin: 0 0 16px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.wf-layer-modal-title.verdict-allow { color: var(--green); }
+.wf-layer-modal-title.verdict-log   { color: var(--yellow); }
+.wf-layer-modal-title.verdict-deny  { color: var(--red); }
+
+.wf-layer-modal-summary {
+  display: flex; flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-size: 0.88rem;
+}
+.wf-layer-modal-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border-radius: 4px;
+  line-height: 1.4;
+}
+.wf-layer-modal-label {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.wf-layer-modal-value {
+  color: var(--text);
+  word-break: break-word;
+}
+.wf-layer-modal-details {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.wf-layer-modal-details summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  padding: 4px 0;
+}
+.wf-layer-modal-details summary:hover { color: var(--accent); }
+.wf-layer-modal-payload {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-family: ui-monospace, monospace;
+  color: var(--text-dim);
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }

@@ -121,8 +121,10 @@ type RunFinalStatus string
 
 const (
 	RunSuccess     RunFinalStatus = "SUCCESS"
+	RunHaltedL0    RunFinalStatus = "HALTED_L0" // WP-01 U4
 	RunHaltedL1    RunFinalStatus = "HALTED_L1"
 	RunHaltedL2    RunFinalStatus = "HALTED_L2"
+	RunHaltedL3    RunFinalStatus = "HALTED_L3" // WP-01 U4
 	RunCEError     RunFinalStatus = "CE_ERROR"
 	RunCycleError  RunFinalStatus = "CYCLE_ERROR"
 	RunSchemaError RunFinalStatus = "SCHEMA_ERROR"
@@ -205,15 +207,19 @@ func RunWorkflow(ctx context.Context, wf WorkflowJSON, input map[string]any, run
 		default:
 		}
 
-		out, halt, phase, err := runNode(ctx, node, payload, runID, loopbackBase, authKey, wf.auditL1Enabled(), wf.auditL2Enabled(), emit)
+		out, halt, phase, err := runNode(ctx, node, payload, runID, loopbackBase, authKey, wf.WorkflowSlug, wf.auditL1Enabled(), wf.auditL2Enabled(), emit)
 		if err != nil {
 			emit(RunEvent{Phase: "halt", NodeID: nodeID, Error: err.Error()})
 			emit(RunEvent{Phase: "end", Error: err.Error()})
 			switch phase {
+			case "l0":
+				return RunHaltedL0
 			case "l1":
 				return RunHaltedL1
 			case "l2":
 				return RunHaltedL2
+			case "l3":
+				return RunHaltedL3
 			default:
 				return RunCEError
 			}
@@ -221,10 +227,14 @@ func RunWorkflow(ctx context.Context, wf WorkflowJSON, input map[string]any, run
 		if halt {
 			emit(RunEvent{Phase: "end"})
 			switch phase {
+			case "l0":
+				return RunHaltedL0
 			case "l1":
 				return RunHaltedL1
 			case "l2":
 				return RunHaltedL2
+			case "l3":
+				return RunHaltedL3
 			default:
 				return RunCEError
 			}
@@ -314,11 +324,53 @@ func sortStrings(s []string) {
 // SaaS calls fire. When false, a synthetic SKIPPED phase event is emitted in
 // place of the call and the node proceeds to the next step. Lets workflows
 // run end-to-end without the audit-gate SaaS as a dependency.
-func runNode(ctx context.Context, node WorkflowNode, input any, runID, loopbackBase, authKey string, auditL1Enabled, auditL2Enabled bool, emit func(RunEvent)) (output any, halt bool, lastPhase string, err error) {
+func runNode(ctx context.Context, node WorkflowNode, input any, runID, loopbackBase, authKey, projectSlug string, auditL1Enabled, auditL2Enabled bool, emit func(RunEvent)) (output any, halt bool, lastPhase string, err error) {
 	wfSlug, stageSlug := splitCESlug(node.CESlug)
 	spec, ldErr := loadCESpec(wfSlug, stageSlug)
 	if ldErr != nil {
 		return nil, false, "ce", fmt.Errorf("loadCESpec(%s/%s): %w", wfSlug, stageSlug, ldErr)
+	}
+
+	// ── 0. L0 Lobster Trap ingress (WP-01 U4) ───────────────────────
+	// Pure-Go regex DPI + LLM canonicalize (Gemini default, Vultr switchable).
+	// Sequencing: TrustGateL0 == 0 → layer skipped; ≥ 1 → run.
+	// Verdict semantics: DENY halts node before L1/F/L2/L3; LOG continues but
+	// persists to SQLite; ALLOW continues silently. UI maps LOG→ALLOW visually.
+	if spec.TrustGateL0 == 0 {
+		emit(RunEvent{
+			Phase: "l0", NodeID: node.ID, CESlug: node.CESlug,
+			Verdict: "SKIPPED", Reasons: []string{"trust_gate_L0=0 on CE spec"},
+			State: "skipped",
+		})
+	} else {
+		emit(RunEvent{Phase: "l0", NodeID: node.ID, CESlug: node.CESlug, State: "running"})
+		l0Start := time.Now()
+		inputJSON, _ := json.Marshal(input)
+		l0Result := ltInspectWithLLM(string(inputJSON), true)
+		l0Latency := time.Since(l0Start).Milliseconds()
+		l0Meta, _ := json.Marshal(map[string]interface{}{
+			"risk_score":   l0Result.RiskScore,
+			"matched_rule": l0Result.MatchedRule,
+			"flags":        l0Result.Flags,
+			"deny_message": l0Result.DenyMessage,
+			"duration_ms":  l0Result.DurationMs,
+			"raw":          l0Result.Raw,
+		})
+		uiVerdict := l0Result.Verdict
+		if uiVerdict == "LOG" {
+			uiVerdict = "ALLOW" // binary UI mapping per David spec 2026-05-19
+		}
+		emit(RunEvent{
+			Phase: "l0", NodeID: node.ID, CESlug: node.CESlug,
+			Verdict: uiVerdict, Meta: l0Meta, LatencyMs: l0Latency, State: "completed",
+		})
+		// Persist every L0 verdict (ALLOW + LOG + DENY) to SQLite for forensics.
+		go AppendLayerAudit(context.Background(), projectSlug, runID, node.CESlug, "L0",
+			l0Result.Verdict, l0Result.MatchedRule, l0Result.DenyMessage,
+			0, l0Result.RiskScore, l0Result.Flags, input)
+		if l0Result.Verdict == "DENY" {
+			return nil, true, "l0", nil
+		}
 	}
 
 	// ── 1. L1 P-check (or SKIP per WP-AO-50 flag) ───────────────────
@@ -457,7 +509,45 @@ func runNode(ctx context.Context, node WorkflowNode, input any, runID, loopbackB
 		return nil, true, "l2", nil
 	}
 
-	return ceOut, false, "l2", nil
+	// ── 4. L3 Lobster Trap egress (WP-01 U4) ────────────────────────
+	// Egress mirror of L0: scrub banking → render JSON-as-NL → regex pre-scan
+	// → ltInspectWithLLM. TrustGateL3 == 0 → layer skipped.
+	if spec.TrustGateL3 == 0 {
+		emit(RunEvent{
+			Phase: "l3", NodeID: node.ID, CESlug: node.CESlug,
+			Verdict: "SKIPPED", Reasons: []string{"trust_gate_L3=0 on CE spec"},
+			Output: ceOut, State: "skipped",
+		})
+		return ceOut, false, "l3", nil
+	}
+	emit(RunEvent{Phase: "l3", NodeID: node.ID, CESlug: node.CESlug, State: "running"})
+	l3Start := time.Now()
+	l3Resp := l3EgressInspect(ceOut, true)
+	l3Latency := time.Since(l3Start).Milliseconds()
+	l3Verdict, _ := l3Resp["verdict"].(string)
+	l3Rule, _ := l3Resp["matched_rule"].(string)
+	l3DenyMsg, _ := l3Resp["deny_message"].(string)
+	l3Risk, _ := l3Resp["risk_score"].(float64)
+	var l3Flags []string
+	if rawFlags, ok := l3Resp["flags"].([]string); ok {
+		l3Flags = rawFlags
+	}
+	l3Meta, _ := json.Marshal(l3Resp)
+	uiL3Verdict := l3Verdict
+	if uiL3Verdict == "LOG" {
+		uiL3Verdict = "ALLOW"
+	}
+	emit(RunEvent{
+		Phase: "l3", NodeID: node.ID, CESlug: node.CESlug,
+		Verdict: uiL3Verdict, Meta: l3Meta, LatencyMs: l3Latency, State: "completed",
+	})
+	go AppendLayerAudit(context.Background(), projectSlug, runID, node.CESlug, "L3",
+		l3Verdict, l3Rule, l3DenyMsg, 0, l3Risk, l3Flags, ceOut)
+	if l3Verdict == "DENY" {
+		return nil, true, "l3", nil
+	}
+
+	return ceOut, false, "l3", nil
 }
 
 func splitCESlug(s string) (wf, stage string) {

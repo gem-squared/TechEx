@@ -18,12 +18,14 @@
   ],
   "stage_type": "llm-assisted",
   "agent_role": "claim-intake-agent",
+  "trust_gate_l0": 60,
   "trust_gate_l1": 70,
   "trust_gate_l2": 70,
+  "trust_gate_l3": 60,
   "reference_data": {
     "policies": ""
   },
   "source_file": "/Users/inseokseo/Hackathon/TechEx/.gem-squared/workspace/health-insurance-claim-pipeline/uploaded_files/claim-01-intake.md",
   "created_at": "2026-05-18T15:07:53Z",
-  "updated_at": "2026-05-18T15:07:53Z"
+  "updated_at": "2026-05-18T15:56:22Z"
 }
