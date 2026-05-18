@@ -561,9 +561,15 @@
         if (json && json.sample_i) {
           document.getElementById("i-input").value = json.sample_i;
         }
-        // Show edited-vs-standard badge + refresh the standard pane
+        // Refresh the "standard correction data" pane against the embedded
+        // canonical the server just confirmed — keeps Reset pointing at the
+        // true baseline.
+        const stdEl = document.getElementById("standard-sample");
+        if (stdEl && json && json.original_sample_i) stdEl.textContent = json.original_sample_i;
+        // Use the server's is_edited flag rather than string-comparing
+        // (avoids whitespace/key-order mismatches).
         const badge = document.getElementById("sample-edited-badge");
-        if (badge) badge.style.display = (json && json.original_sample_i && json.sample_i !== json.original_sample_i) ? "inline" : "none";
+        if (badge) badge.style.display = (json && json.is_edited) ? "inline" : "none";
         setStatus("✓ Saved — next workflow Run will use this input. (" + (json && json.saved_at ? json.saved_at : "") + ")", "ok");
       } catch (e) {
         setStatus("Save failed: " + e.message, "err");

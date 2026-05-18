@@ -104,9 +104,17 @@ func handleCESampleUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"format_error"}`, http.StatusInternalServerError)
 		return
 	}
-	// Self-heal: any pre-WP-AO-67 CE without OriginalSampleI gets one filled
-	// in the first time Save is called (snapshot of whatever SampleI was).
-	if spec.OriginalSampleI == "" {
+	// 2026-05-19 — every Save snaps spec.OriginalSampleI to the embedded
+	// canonical so Reset always restores the TRUE clean baseline, not a
+	// previously-edited / previously-self-healed sample that drifted via
+	// create-ce or earlier Save paths. Mirrors GET + Reset behaviour (both
+	// prefer embedded). For user-authored CEs not in the embed, falls back
+	// to the existing self-heal (snapshot of SampleI when OriginalSampleI
+	// is empty).
+	embeddedStd, hasEmbedded := canonicalStandardSample(workflow, stage)
+	if hasEmbedded {
+		spec.OriginalSampleI = embeddedStd
+	} else if spec.OriginalSampleI == "" {
 		spec.OriginalSampleI = spec.SampleI
 	}
 	spec.SampleI = string(pretty)
@@ -115,14 +123,29 @@ func handleCESampleUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"save_failed","detail":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
+	// Report the embedded canonical when available so the client's edited-vs-
+	// standard comparison agrees with GET (which also prefers embedded).
+	originalForResp := spec.OriginalSampleI
+	if hasEmbedded {
+		originalForResp = embeddedStd
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":                true,
 		"ce_slug":           workflow + "/" + stage,
 		"sample_i":          spec.SampleI,
-		"original_sample_i": spec.OriginalSampleI,
+		"original_sample_i": originalForResp,
+		"original_source":   ifEmbedded(hasEmbedded),
+		"is_edited":         spec.SampleI != originalForResp && originalForResp != "",
 		"saved_at":          time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+func ifEmbedded(ok bool) string {
+	if ok {
+		return "embedded"
+	}
+	return "spec"
 }
 
 // canonicalStandardSample returns the embedded green-path sample for a CE
