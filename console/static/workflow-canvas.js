@@ -980,10 +980,22 @@
       applyNodeClass(drawflowID, evt);
       // WP-01 U5 — record latest L0/L1/L2/L3 result for chip-click popup.
       if (evt.state === 'completed' || (evt.verdict && !evt.state)) {
-        if (evt.phase === 'l0') storeLayerResult(evt.node_id, 'L0', evt);
-        if (evt.phase === 'l1') storeLayerResult(evt.node_id, 'L1', evt);
-        if (evt.phase === 'l2') storeLayerResult(evt.node_id, 'L2', evt);
-        if (evt.phase === 'l3') storeLayerResult(evt.node_id, 'L3', evt);
+        let layerKey = '';
+        if (evt.phase === 'l0') layerKey = 'L0';
+        else if (evt.phase === 'l1') layerKey = 'L1';
+        else if (evt.phase === 'l2') layerKey = 'L2';
+        else if (evt.phase === 'l3') layerKey = 'L3';
+        if (layerKey) {
+          storeLayerResult(evt.node_id, layerKey, evt);
+          // Auto-popup on negative verdict (David spec 2026-05-19:
+          // "Popup for negative or issue"). DENY surfaces the modal
+          // immediately; FAILURE on L2 also pops; ALLOW/SUCCESS/SKIPPED stay
+          // silent (they're already visible in the run trace).
+          const v = (evt.verdict || '').toUpperCase();
+          if (v === 'DENY' || v === 'FAILURE') {
+            openLayerModal(layerKey, evt.ce_slug || '', evt);
+          }
+        }
       }
     }
 
@@ -1834,13 +1846,14 @@
   // Chip click reads data-layer + finds the drawflow node ID by walking up
   // to the parent `.drawflow-node`. Looks up latestLayerResults[nodeID][layer]
   // and routes to openLayerModal (DENY/LOG) or toast (ALLOW/no-data).
+  // Delegation attached to document (not #drawflow) so Drawflow's pointer
+  // handlers can't swallow the chip click before we see it.
   function wireLayerChipClicks() {
-    const drawflowEl = document.getElementById('drawflow');
-    if (!drawflowEl) return;
-    drawflowEl.addEventListener('click', (e) => {
+    document.addEventListener('click', (e) => {
       const chip = e.target.closest('.wf-trust-chip');
       if (!chip) return;
-      e.stopPropagation(); // don't let Drawflow select-node fire
+      e.preventDefault();
+      e.stopPropagation();
       const layer = chip.dataset.layer;
       const ceSlug = chip.dataset.ceSlug || '';
       const nodeEl = chip.closest('.drawflow-node');
@@ -1862,7 +1875,7 @@
         return;
       }
       openLayerModal(layer, ceSlug, evt);
-    });
+    }, true); // capture phase — beats Drawflow's bubble-phase node handlers
 
     // Modal close handlers (Esc + close button + click-outside).
     const closeBtn = document.getElementById('wf-layer-modal-close');
