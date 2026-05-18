@@ -14,29 +14,42 @@
   <div id="gate-cover" class="gate-cover">
     <div class="gate-content">
       <div class="gate-logo">GEM² × 🦞</div>
-      <h1 class="gate-title">GEM² + Lobster Trap: Two-Layer AI Governance</h1>
-      <p class="gate-pitch">Enterprise AI needs <strong>two trust layers</strong> — security and truth. <strong>Lobster Trap</strong> blocks prompt-layer attacks at the wire in &lt;15&nbsp;ms. <strong>GEM²</strong> audits reasoning-layer truth after the wire. Together: a four-gate governance pipeline that security and compliance teams can read.</p>
+      <h1 class="gate-title">AI Governance at the Edge</h1>
+      <p class="gate-subtitle">Four-gate per-node pipeline · <code class="gate-formula">F : A → B | P</code> · Regulator-readable evidence</p>
+      <p class="gate-pitch">Every agent action becomes a typed transformation that must cross a verifiable edge — <strong>before</strong> it runs and <strong>after</strong> it answers. Humans define the contract. <strong>GEM²</strong> audits at the edge. The LLM operates inside an enforced face.</p>
+
+      <div class="gate-pipeline">
+        <span class="gp-chip"><span class="gp-icon">🦞</span><span class="gp-gate">L0</span><span class="gp-role">ingress DPI</span></span>
+        <span class="gp-arrow">▶</span>
+        <span class="gp-chip"><span class="gp-icon">🛡</span><span class="gp-gate">L1</span><span class="gp-role">P-check audit</span></span>
+        <span class="gp-arrow">▶</span>
+        <span class="gp-chip gp-f"><span class="gp-icon">🤖</span><span class="gp-gate">F</span><span class="gp-role">contract executor</span></span>
+        <span class="gp-arrow">▶</span>
+        <span class="gp-chip"><span class="gp-icon">🛡</span><span class="gp-gate">L2</span><span class="gp-role">O-check audit</span></span>
+        <span class="gp-arrow">▶</span>
+        <span class="gp-chip"><span class="gp-icon">🦞</span><span class="gp-gate">L3</span><span class="gp-role">egress DPI</span></span>
+      </div>
 
       <div class="gate-layers">
         <div class="gate-layer">
           <span class="gate-layer-icon">🦞</span>
           <div>
             <strong>Lobster Trap — L0 (ingress) + L3 (egress)</strong>
-            <span class="gate-layer-desc">"Is this safe?" — fast, deterministic DPI. L0 scans the NL prompt at ingress; L3 scans the rendered output at egress. Regex + 22 metadata fields + YAML policy. Zero runtime cost.</span>
+            <span class="gate-layer-desc">"Is this safe?" — pure-Go regex DPI + 5 escalators + LLM intent canonicalize. Catches injections, exfil, credential leak, wire-fraud — on BOTH wires. <em>Vultr DeepSeek-V3.2.</em></span>
           </div>
         </div>
         <div class="gate-layer">
-          <span class="gate-layer-icon">🔬</span>
+          <span class="gate-layer-icon">🛡</span>
           <div>
             <strong>GEM² Truth Filter — L1 (P-check) + L2 (O-check)</strong>
-            <span class="gate-layer-desc">"Is this true?" — semantic + epistemic evaluation. L1 validates input against type A &amp; preconditions; L2 validates output against type B &amp; postconditions. TPMN formal-methods scoring (0-100).</span>
+            <span class="gate-layer-desc">"Does this satisfy the contract?" — L1 verifies input against A + P_pre; L2 verifies output against B + P_post. Retrieval-augmented epistemic audit. <em>Gemini 3.1 Pro Preview.</em></span>
           </div>
         </div>
         <div class="gate-layer">
           <span class="gate-layer-icon">🤖</span>
           <div>
-            <strong>Contract-Executor (Vultr open-source LLM)</strong>
-            <span class="gate-layer-desc">Single-F worker between the gates. Vultr DeepSeek-V3.2 executes one contract's processing logic per stage. The contract holds; swap the model. L0 → L1 → F → L2 → L3 chain per node.</span>
+            <strong>Contract-Executor (F) — the work itself</strong>
+            <span class="gate-layer-desc">The agent's actual transformation, bounded by A → B | P. The judge (Gemini) and the worker (Vultr) are never the same LLM — that separation is what makes the verdict trustworthy.</span>
           </div>
         </div>
       </div>
@@ -45,7 +58,10 @@
         <button id="gate-submit" class="gate-btn">Enter Console</button>
       </div>
 
-      <p class="gate-footer">GEM².AI × Veea — TechEX Hackathon 2026 · Track 1: Agent Security &amp; AI Governance</p>
+      <p class="gate-footer">
+        <strong>GEM².AI</strong> × Veea — TechEX Hackathon 2026 · Track 1: Agent Security &amp; AI Governance<br>
+        <span class="gate-team">Inseok Seo <span class="gate-team-tag">team lead</span> · Jacobus Wentzel · david@gemsquared.ai</span>
+      </p>
     </div>
   </div>
 
