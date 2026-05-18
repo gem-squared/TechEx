@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workflow Canvas — GEM² + Lobster Trap</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/vendor/drawflow/drawflow.min.css">
+  <link rel="stylesheet" href="/workflow-canvas.css">
+</head>
+<body class="wf-page">
+
+  <!-- Top bar ──────────────────────────────────────────────────────── -->
+  <header class="wf-header">
+    <div class="wf-brand">
+      <span class="wf-logo">GEM²</span>
+      <span class="wf-tag">Workflow Canvas</span>
+    </div>
+
+    <div class="wf-title-block">
+      <input id="wf-title-input"
+             class="wf-title-input"
+             placeholder="Workflow title"
+             autocomplete="off">
+      <input id="wf-slug-input"
+             class="wf-slug-input"
+             placeholder="workflow-slug"
+             pattern="[a-z0-9][-a-z0-9]{0,62}[a-z0-9]"
+             autocomplete="off">
+    </div>
+
+    <div class="wf-actions">
+      <!-- WP-AO-41: scenario picker — pre-filled inputs for the
+           Health-Insurance-Claim demo. Hidden until SCENARIOS is populated. -->
+      <select id="wf-scenario-picker" class="wf-scenario-picker" style="display:none;"
+              title="Pick a pre-filled demo scenario — used as the Run input"></select>
+      <!-- WP-AO-51: zoom controls. Always visible. Keyboard +/-/0 also wired. -->
+      <div class="wf-zoom-group" role="group" aria-label="Canvas zoom">
+        <button id="wf-zoom-out"   class="wf-btn wf-btn-ghost wf-btn-icon" title="Zoom out (−)">−</button>
+        <button id="wf-zoom-reset" class="wf-btn wf-btn-ghost wf-btn-icon" title="Reset zoom (0)">⊙</button>
+        <button id="wf-zoom-in"    class="wf-btn wf-btn-ghost wf-btn-icon" title="Zoom in (+)">+</button>
+      </div>
+      <!-- Primary actions stay visible — Run + Deploy are the CTAs -->
+      <button id="wf-run-btn"  class="wf-btn wf-btn-accent" title="Execute the workflow (L1/L2 audit per menu toggles)">▶ Run</button>
+      <button id="wf-deploy-btn" class="wf-deploy-btn" disabled
+              title="Run a test first to enable Deploy">Deploy now</button>
+      <!-- WP-AO-51: hamburger menu — Load/Save + audit toggles (secondary actions) -->
+      <div class="wf-menu-wrapper">
+        <button id="wf-menu-btn" class="wf-btn wf-btn-ghost" title="More actions">☰</button>
+        <div id="wf-menu-dropdown" class="wf-menu-dropdown hidden" role="menu">
+          <button id="wf-load-btn" class="wf-menu-item" role="menuitem">📂 Load workflow</button>
+          <button id="wf-save-btn" class="wf-menu-item" role="menuitem">💾 Save workflow</button>
+          <hr class="wf-menu-divider">
+          <label class="wf-menu-item wf-menu-toggle" role="menuitemcheckbox"
+                 title="L1 P-check (precondition gate) before each CE invocation">
+            <input type="checkbox" id="wf-audit-l1-toggle" checked> 🛡 L1 audit
+          </label>
+          <label class="wf-menu-item wf-menu-toggle" role="menuitemcheckbox"
+                 title="L2 O-check (postcondition gate) after each CE invocation">
+            <input type="checkbox" id="wf-audit-l2-toggle" checked> 🛡 L2 audit
+          </label>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- WP-AO-58 — workflow run progress bar (between header and body) -->
+  <div id="wf-progress" class="wf-progress hidden" role="progressbar"
+       aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <div id="wf-progress-fill" class="wf-progress-fill"></div>
+  </div>
+
+  <!-- Main body — 3-column flexbox ─────────────────────────────────── -->
+  <main class="wf-body">
+
+    <!-- Palette sidebar -->
+    <aside class="wf-palette" id="wf-palette">
+      <div class="wf-palette-header">
+        <h3>CE Palette</h3>
+        <div class="wf-palette-header-right">
+          <button id="wf-palette-reload" class="wf-palette-reload-btn"
+                  title="Reload CE registry — picks up CEs created in Crafter tab">↻</button>
+          <span class="wf-palette-count" id="wf-palette-count">0</span>
+        </div>
+      </div>
+      <input id="wf-palette-search"
+             class="wf-palette-search"
+             placeholder="Search CEs…"
+             autocomplete="off">
+      <div id="wf-palette-list" class="wf-palette-list">
+        <div class="wf-palette-empty">Loading CE registry…</div>
+      </div>
+    </aside>
+
+    <!-- WP-AO-57 — horizontal splitter between palette and canvas -->
+    <div id="wf-splitter-palette" class="wf-splitter wf-splitter-h"
+         role="separator" aria-orientation="vertical"
+         title="Drag to resize palette"></div>
+
+    <!-- Canvas region — Drawflow mounts here -->
+    <section class="wf-canvas-wrap">
+      <div id="drawflow" class="wf-drawflow"></div>
+      <div id="wf-overlay" class="wf-overlay hidden">
+        <div class="wf-overlay-card">
+          <h2 id="wf-overlay-title">…</h2>
+          <p id="wf-overlay-message">…</p>
+          <button id="wf-overlay-dismiss" class="wf-btn wf-btn-accent">OK</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- WP-AO-57 — vertical splitter between canvas body and trace panel -->
+  <div id="wf-splitter-trace" class="wf-splitter wf-splitter-v"
+       role="separator" aria-orientation="horizontal"
+       title="Drag to resize trace panel"></div>
+
+  <!-- Bottom trace panel — collapsible ─────────────────────────────── -->
+  <aside class="wf-trace" id="wf-trace">
+    <div class="wf-trace-header" id="wf-trace-toggle">
+      <h3>Run Trace</h3>
+      <span class="wf-trace-meta" id="wf-trace-meta">no run yet</span>
+      <span class="wf-trace-chevron" id="wf-trace-chevron">▼</span>
+    </div>
+    <div class="wf-trace-body" id="wf-trace-body">
+      <div class="wf-trace-empty">Run the workflow to see L1 → CE → L2 audit chain.</div>
+    </div>
+    <div id="wf-trace-banner" class="wf-trace-banner hidden"></div>
+  </aside>
+
+  <!-- Toast container — created on demand by JS -->
+  <div id="wf-toasts" class="wf-toasts" aria-live="polite"></div>
+
+  <!-- WP-AO-51 per-node CE viewer modal (hidden by default).
+       Opens when user clicks a node in the canvas. Embeds the /ce-viewer
+       page in an iframe — full sample-prefilled, run-in-isolation UX.
+       Reuses the entire WP-AO-31 viewer page; zero new viewer code. -->
+  <div id="wf-ce-modal" class="wf-ce-modal hidden" role="dialog" aria-modal="true">
+    <div class="wf-ce-modal-card">
+      <button id="wf-ce-modal-close" class="wf-ce-modal-close" title="Close (Esc)">×</button>
+      <iframe id="wf-ce-modal-frame" class="wf-ce-modal-frame" title="CE viewer"></iframe>
+    </div>
+  </div>
+
+  <!-- WP-AO-39 Deploy collision modal (hidden by default) -->
+  <div id="wf-deploy-modal" class="wf-deploy-modal hidden" role="dialog" aria-modal="true">
+    <div class="wf-deploy-modal-card">
+      <h3 id="wf-deploy-modal-title">Workflow already deployed</h3>
+      <p id="wf-deploy-modal-body" class="wf-deploy-modal-body"></p>
+      <div class="wf-deploy-modal-actions">
+        <button id="wf-deploy-modal-overwrite" class="wf-btn wf-btn-danger">Overwrite existing</button>
+        <button id="wf-deploy-modal-alt"       class="wf-btn wf-btn-accent">Deploy as new slug</button>
+        <button id="wf-deploy-modal-cancel"    class="wf-btn wf-btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WP-AO-39 Deploy success card (replaces toast for actionable result) -->
+  <div id="wf-deploy-success" class="wf-deploy-success hidden">
+    <h3>✓ Workflow deployed</h3>
+    <p>Public URL:</p>
+    <a id="wf-deploy-success-url" class="wf-deploy-success-link" target="_blank" rel="noopener"></a>
+    <div class="wf-deploy-success-actions">
+      <button id="wf-deploy-success-copy"  class="wf-btn wf-btn-ghost">Copy URL</button>
+      <button id="wf-deploy-success-open"  class="wf-btn wf-btn-accent">Open in new tab</button>
+      <button id="wf-deploy-success-close" class="wf-btn wf-btn-ghost">Close</button>
+    </div>
+  </div>
+
+  <!-- Drawflow + canvas glue (Unit 4-6 wires this) -->
+  <script src="/vendor/drawflow/drawflow.min.js"></script>
+  <script>
+    // Auth gate: redirect to login if no key in query string.
+    // The full canvas JS (Units 4-6) replaces this stub.
+    (function authGate() {
+      const params = new URLSearchParams(window.location.search);
+      const key = params.get('key');
+      if (!key) {
+        // Send the user back to the gate page
+        window.location.href = '/';
+        return;
+      }
+      window.WF_AUTH_KEY = key;
+    })();
+  </script>
+  <script src="/workflow-canvas.js" defer></script>
+</body>
+</html>

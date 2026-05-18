@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "workflow_slug": "claims-demo",
+  "title": "Health Insurance Claim — Full Pipeline Demo",
+  "created_at": "2026-05-18T00:40:00+09:00",
+  "description": "Six-stage health-insurance claim pipeline with L1 P-check + L2 O-check gating every edge. Audit chain visible in the trace panel. Pre-filled scenario A001 (FULLY APPROVED). Switch scenarios for happy / denied / partial outcomes.",
+  "entry_node": "n1",
+  "exit_node": "n6",
+  "nodes": [
+    {
+      "id": "n1",
+      "ce_slug": "health-insurance-claim-pipeline/claim-intake",
+      "position": { "x": 80,   "y": 220 }
+    },
+    {
+      "id": "n2",
+      "ce_slug": "health-insurance-claim-pipeline/policy-verification",
+      "position": { "x": 380,  "y": 220 }
+    },
+    {
+      "id": "n3",
+      "ce_slug": "health-insurance-claim-pipeline/eligibility-check",
+      "position": { "x": 680,  "y": 220 }
+    },
+    {
+      "id": "n4",
+      "ce_slug": "health-insurance-claim-pipeline/medical-review",
+      "position": { "x": 980,  "y": 220 }
+    },
+    {
+      "id": "n5",
+      "ce_slug": "health-insurance-claim-pipeline/claim-adjudication",
+      "position": { "x": 1280, "y": 220 }
+    },
+    {
+      "id": "n6",
+      "ce_slug": "health-insurance-claim-pipeline/disbursement",
+      "position": { "x": 1580, "y": 220 }
+    }
+  ],
+  "edges": [
+    { "from": "n1.output", "to": "n2.input" },
+    { "from": "n2.output", "to": "n3.input" },
+    { "from": "n3.output", "to": "n4.input" },
+    { "from": "n4.output", "to": "n5.input" },
+    { "from": "n5.output", "to": "n6.input" }
+  ]
+}

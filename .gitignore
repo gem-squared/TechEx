@@ -1,0 +1,47 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+archive/
+archive/*
+!.gem-squared/archive/
+!.gem-squared/archive/**
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# TPMN artifacts (keep alarm.md and work-plan tracked)
+.gem-squared/truth-logs/
+.gem-squared/verify-work-logs/
+.gem-squared/evidences/
+*.exe
+loan-agent
+gem2-crafter
+gem2-crafter-linux
+gem2-techex
+gem2-techex-linux
+bin/
+*.txt
+Docs/Workflow-candidates
+
+# Dev-only spike artifacts (NOT shipped — Go 1.25 //go:embed does NOT
+# actually exclude underscore-prefixed dirs under wildcard, contrary to
+# older docs. So we gitignore explicitly.)
+console/static/_spike/
