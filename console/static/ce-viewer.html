@@ -71,6 +71,46 @@
     .status { font-size: 0.85rem; color: var(--text-dim); }
     .status.ok  { color: var(--ok); }
     .status.err { color: var(--err); }
+
+    /* Run CE progress bar — indeterminate stripe that pulses while a run is in flight */
+    .cev-run-progress {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .cev-run-progress.hidden { display: none; }
+    .cev-run-progress-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(148,163,184,0.10);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .cev-run-progress-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 32%;
+      background: linear-gradient(90deg,
+        rgba(234,88,12,0.10) 0%,
+        rgba(234,88,12,0.95) 50%,
+        rgba(234,88,12,0.10) 100%);
+      border-radius: 999px;
+      box-shadow: 0 0 16px rgba(234,88,12,0.55);
+      animation: cev-run-slide 1.4s ease-in-out infinite;
+    }
+    @keyframes cev-run-slide {
+      0%   { left: -32%; }
+      50%  { left: 50%; }
+      100% { left: 100%; }
+    }
+    .cev-run-progress-label {
+      font-size: 0.78rem;
+      color: var(--accent);
+      font-family: ui-monospace, monospace;
+      letter-spacing: 0.5px;
+    }
     .output {
       background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
       padding: 12px; min-height: 100px; max-height: 500px; overflow: auto;
@@ -184,6 +224,15 @@
         <button id="curl-btn" class="ghost">Copy curl</button>
         <input type="checkbox" id="cev-audit-toggle" checked hidden>
         <span id="status" class="status">Ready.</span>
+      </div>
+
+      <!-- Run progress indicator — appears under the button row while Run CE is in flight -->
+      <div id="cev-run-progress" class="cev-run-progress hidden" role="progressbar"
+           aria-label="Run CE in progress">
+        <div class="cev-run-progress-bar">
+          <div class="cev-run-progress-fill"></div>
+        </div>
+        <div class="cev-run-progress-label" id="cev-run-progress-label">Running…</div>
       </div>
     </div>
 
@@ -416,6 +465,7 @@
       btn.disabled = true;
       clearAuditPanels();
       setStatus(auditOn ? "Running L1 → F → L2..." : "Calling CE (F-only)...", "");
+      showRunProgress(auditOn ? "L1 P-check → F → L2 O-check…" : "F executing…");
       document.getElementById("output").textContent = "// waiting on Vultr LLM...";
       document.getElementById("meta").innerHTML = "";
 
@@ -455,7 +505,20 @@
         document.getElementById("output").textContent = "// " + e.message;
       } finally {
         btn.disabled = false;
+        hideRunProgress();
       }
+    }
+
+    function showRunProgress(label) {
+      const el = document.getElementById("cev-run-progress");
+      const lbl = document.getElementById("cev-run-progress-label");
+      if (!el) return;
+      if (lbl && label) lbl.textContent = label;
+      el.classList.remove("hidden");
+    }
+    function hideRunProgress() {
+      const el = document.getElementById("cev-run-progress");
+      if (el) el.classList.add("hidden");
     }
 
     function renderAuditedResponse(json, totalMs) {
