@@ -168,6 +168,14 @@ TechEx/
 
 ---
 
+## References
+
+- **TPMN-PSL formal grammar** — `F : A → B | P` substrate that this project is built on. Spec + reference implementation at [github.com/gem-squared/tpmn-psl](https://github.com/gem-squared/tpmn-psl).
+- **Lobster Trap** — Veea's deep-packet inspection engine. Pure-Go port lives in [`console/lobstertrap.go`](console/lobstertrap.go) + [`console/lobstertrap_escalators.go`](console/lobstertrap_escalators.go).
+- **GEM² Truth Filter SaaS** — `gem2-tpmn-checker.fly.dev` — the L1/L2 audit-gate upstream (proprietary).
+
+---
+
 ## Team
 
 **Inseok Seo** — team lead · `david@gemsquared.ai`
