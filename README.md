@@ -3,10 +3,12 @@
 > Every agent action crosses a verifiable contract edge.
 > Humans define the rules — GEM² produces regulator-readable evidence.
 
+![GEM² field manual — 67-second demo walkthrough](Docs/manual.gif)
+
 **TechEX Hackathon 2026 · Track 1: Agent Security & AI Governance (Powered by Veea)**
 
 🔗 **Live demo:** [https://techex-track1.gemsquared.ai/](https://techex-track1.gemsquared.ai/)
-🎥 **Field manual (video walkthrough):** [https://youtu.be/kjc4Pom9jfI](https://youtu.be/kjc4Pom9jfI)
+🎥 **Field manual (full video):** [https://youtu.be/kjc4Pom9jfI](https://youtu.be/kjc4Pom9jfI)
 
 ---
 
