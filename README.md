@@ -6,6 +6,7 @@
 **TechEX Hackathon 2026 · Track 1: Agent Security & AI Governance (Powered by Veea)**
 
 🔗 **Live demo:** [https://techex-track1.gemsquared.ai/](https://techex-track1.gemsquared.ai/)
+🎥 **Field manual (video walkthrough):** [https://youtu.be/kjc4Pom9jfI](https://youtu.be/kjc4Pom9jfI)
 
 ---
 
