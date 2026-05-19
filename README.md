@@ -143,8 +143,8 @@ TechEx/
 ├── .gem-squared/work-plan/       # TPMN work plan (WP-01 + units)
 ├── policies/                     # Veea Lobster Trap YAML (reference)
 ├── Dockerfile + fly.toml         # (Fly.io leftover from parent; current deploy is systemd on a VPS)
-├── go.mod + go.sum               # Go 1.25, modernc.org/sqlite (pure-Go SQLite)
-└── CLAUDE.md                     # TPMN authoring conventions for the project
+└── go.mod + go.sum               # Go 1.25, modernc.org/sqlite (pure-Go SQLite)
+
 ```
 
 ---
