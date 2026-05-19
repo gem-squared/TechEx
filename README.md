@@ -47,7 +47,7 @@ Every verdict (ALLOW / LOG / DENY across all four gates) persists to a SQLite `l
 1. Open [https://techex-track1.gemsquared.ai/](https://techex-track1.gemsquared.ai/)
 2. Click **Enter Console**
 3. Click **⚡ Load demo project** — seeds 6 health-insurance-claim CEs + SQLite ledger + compliance corpus. The 6 CEs appear in the **CE Palette** sidebar on the left.
-4. The default workflow auto-loads on the canvas (claim-01 → … → claim-06, 6 nodes connected linearly). Scenario A001 (Hospitalisation, COMP-HEALTH-GOLD, fully approved) is pre-selected as the first-node input.
+4. The default workflow auto-loads on the canvas (claim-01 → … → claim-06, 6 nodes connected linearly). 
 5. Click **▶ Run** — watch all 6 nodes pass L0 → L1 → F → L2 → L3 (24 verdicts)
 6. Click any chip on any node to inspect the verdict in a popup
 7. Click **📋 Audit log** in the toolbar to see the SQLite evidence trail
