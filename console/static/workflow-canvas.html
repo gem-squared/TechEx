@@ -208,6 +208,28 @@
     </div>
   </div>
 
+  <!-- One-time Field Manual popup (first visit only — localStorage gated) -->
+  <div id="wf-manual-modal" class="wf-manual-modal hidden" role="dialog" aria-modal="true" aria-label="Field manual">
+    <div class="wf-manual-modal-card">
+      <button id="wf-manual-modal-close" class="wf-manual-modal-close" title="Close (Esc)">×</button>
+      <div class="wf-manual-eyebrow">▶ Welcome</div>
+      <h3 class="wf-manual-modal-title">Watch the 1-minute field manual</h3>
+      <p class="wf-manual-modal-sub">A 67-second walkthrough — the canvas, the four-gate pipeline, the adversarial L0 DENY, and the SQLite audit log. Returning visitors won't see this again.</p>
+      <div class="wf-manual-video">
+        <iframe id="wf-manual-iframe"
+                src=""
+                title="GEM² field manual"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen></iframe>
+      </div>
+      <div class="wf-manual-actions">
+        <a href="https://youtu.be/kjc4Pom9jfI" target="_blank" rel="noopener" id="wf-manual-watch" class="wf-btn wf-btn-accent">▶ Watch on YouTube</a>
+        <button id="wf-manual-skip" class="wf-btn wf-btn-ghost">Got it — skip</button>
+      </div>
+    </div>
+  </div>
+
   <!-- WP-01 Audit Log modal — surfaces the SQLite layer_audit_log table -->
   <div id="wf-audit-modal" class="wf-audit-modal hidden" role="dialog" aria-modal="true">
     <div class="wf-audit-modal-card">
@@ -372,6 +394,43 @@
           window.location.reload();
         });
       }
+
+      // ── One-time Field Manual popup ─────────────────────────────
+      // Show only when the user is past the gate AND has never seen it.
+      // localStorage key 'techex-manual-shown' persists across visits +
+      // tabs. 'Lock' also clears the key (localStorage.removeItem above
+      // doesn't clear it — separate localStorage namespace).
+      function maybeShowManualModal() {
+        if (!window.WF_AUTH_KEY) return;          // not authed yet
+        if (localStorage.getItem('techex-manual-shown') === '1') return;
+        const modal = document.getElementById('wf-manual-modal');
+        const iframe = document.getElementById('wf-manual-iframe');
+        const skip  = document.getElementById('wf-manual-skip');
+        const closeBtn = document.getElementById('wf-manual-modal-close');
+        const watchBtn = document.getElementById('wf-manual-watch');
+        if (!modal || !iframe) return;
+        // Lazy-set src so YouTube only loads when modal opens (saves bandwidth)
+        iframe.src = 'https://www.youtube.com/embed/kjc4Pom9jfI?autoplay=0&rel=0';
+        modal.classList.remove('hidden');
+        function dismiss() {
+          modal.classList.add('hidden');
+          iframe.src = '';                         // stop video
+          localStorage.setItem('techex-manual-shown', '1');
+        }
+        skip ?.addEventListener('click', dismiss, { once: true });
+        closeBtn?.addEventListener('click', dismiss, { once: true });
+        watchBtn?.addEventListener('click', () => {
+          // user clicked Watch on YouTube — still mark as shown so they
+          // aren't pestered next visit
+          localStorage.setItem('techex-manual-shown', '1');
+        });
+        modal.addEventListener('click', (e) => { if (e.target === modal) dismiss(); });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !modal.classList.contains('hidden')) dismiss();
+        });
+      }
+      // Slight delay so the canvas paints first; modal slides over after.
+      setTimeout(maybeShowManualModal, 400);
     });
   </script>
   <script src="/workflow-canvas.js" defer></script>
